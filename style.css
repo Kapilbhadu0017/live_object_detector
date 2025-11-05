@@ -1,62 +1,99 @@
+:root {
+    --bg-dark: #1a1a1a;
+    --bg-medium: #2a2a2a;
+    --bg-light: #3a3a3a;
+    --text-primary: #e0e0e0;
+    --text-secondary: #aaaaaa;
+    --accent-color: #00bcd4; /* Your original cyan */
+    --border-color: #444;
+    --shadow-color: rgba(0, 0, 0, 0.5);
+    --border-radius: 8px;
+    --spacing-md: 15px;
+    --spacing-lg: 25px;
+}
+
 body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background-color: #121212;
-    color: #e0e0e0;
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-dark);
+    color: var(--text-primary);
+    display: flex;
+    justify-content: center;
+    align-items: flex-start; /* Align items to the top */
+    min-height: 100vh;
+    margin: 0;
+    padding: var(--spacing-lg);
+    box-sizing: border-box;
+    overflow-x: hidden; /* Prevent horizontal scroll */
+}
+
+.container {
     display: flex;
     flex-direction: column;
     align-items: center;
-    /* justify-content: center; */ /* Remove center to allow stacking */
-    padding-top: 2vh; /* Add some padding at the top */
-    min-height: 100vh;
-    margin: 0;
-    box-sizing: border-box;
+    width: 100%;
+    max-width: 700px; /* Max width for content */
+    gap: var(--spacing-lg); /* Space between major sections */
 }
 
 h1 {
     font-weight: 300;
     letter-spacing: 1px;
-    margin-top: 0;
-    margin-bottom: 20px;
+    margin: 0;
+    font-size: 2.2em;
+    color: var(--accent-color);
+    text-align: center;
+}
+
+.card {
+    background-color: var(--bg-medium);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: var(--spacing-md);
+    box-shadow: 0 4px 10px var(--shadow-color);
+    width: 100%; /* Take full width of container */
+    box-sizing: border-box;
 }
 
 #loadingContainer {
-    width: 80%;
-    max-width: 500px;
     text-align: center;
-    /* --- NEW --- Add positioning to overlay nicely */
-    position: absolute;
+    position: absolute; /* Position relative to body, not container */
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    z-index: 20; /* Make sure it's on top of the video */
-    background: rgba(18, 18, 18, 0.8);
-    padding: 20px;
-    border-radius: 8px;
+    z-index: 20;
+    background: var(--bg-dark); /* Darker background for overlay */
+    padding: var(--spacing-lg);
+    min-width: 300px; /* Ensure it's not too small */
+    max-width: 90vw; /* Responsive width */
 }
 
-/* --- NEW --- Hide loading container by default, script will show it */
 #loadingContainer.hidden {
     display: none;
 }
 
 #loadingMessage {
-    font-size: 1.2em;
-    color: #00bcd4; /* A bright cyan color */
+    font-size: 1.1em;
+    color: var(--accent-color);
     margin-bottom: 10px;
+    line-height: 1.4;
 }
+#loadingMessage strong {
+    color: var(--text-primary);
+}
+
 
 .videoContainer {
     position: relative;
-    width: 640px;
-    height: 480px;
-    max-width: 90vw; /* Ensure it fits on mobile */
-    border: 2px solid #00bcd4;
-    border-radius: 8px;
+    width: 100%;
+    /* 4:3 aspect ratio (480 / 640 = 0.75) */
+    padding-bottom: 75%; 
+    height: 0; /* Remove fixed height */
     overflow: hidden;
-    background: #000; /* Add a black background for loading */
+    background: #000;
+    border: 2px solid var(--accent-color);
+    border-radius: var(--border-radius);
 }
 
-/* --- MODIFIED --- Only hide with .hidden class */
 .videoContainer.hidden {
     display: none;
 }
@@ -67,11 +104,7 @@ video, canvas {
     left: 0;
     width: 100%;
     height: 100%;
-}
-
-video {
-    /* This flips the video like a mirror */
-    transform: scaleX(-1);
+    transform: scaleX(-1); /* Flips video like a mirror */
 }
 
 canvas {
@@ -79,54 +112,130 @@ canvas {
 }
 
 
-/* --- Styles for the slider controls --- */
 .controlsContainer {
     display: flex;
     flex-direction: column;
-    gap: 15px;
-    width: 640px;
-    max-width: 90vw; /* Match video width */
-    margin-top: 20px;
-    padding: 20px;
-    background-color: #222;
-    border-radius: 8px;
-    box-sizing: border-box; /* Include padding in width */
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
 }
 
 .controlGroup {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 10px; /* Space between label, slider, value */
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.controlGroup:last-child {
+    border-bottom: none; /* No border for the last item */
 }
 
 .controlGroup label {
-    flex-shrink: 0; /* Don't let label shrink */
-    font-size: 0.9em;
+    flex-shrink: 0;
+    font-size: 0.95em;
+    color: var(--text-secondary);
+    width: 150px; /* Fixed width for labels for alignment */
 }
 
 .controlGroup input[type="range"] {
-    flex-grow: 1; /* Let slider take remaining space */
+    flex-grow: 1;
     cursor: pointer;
+    -webkit-appearance: none; /* Remove default styling for Chrome */
+    appearance: none;
+    height: 6px;
+    background: var(--bg-light);
+    outline: none;
+    border-radius: 3px;
+    transition: background 0.2s ease;
+}
+
+.controlGroup input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    cursor: grab;
+    box-shadow: 0 0 5px rgba(0, 188, 212, 0.5); /* Glowing effect */
+}
+
+.controlGroup input[type="range"]::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    cursor: grab;
+    box-shadow: 0 0 5px rgba(0, 188, 212, 0.5);
 }
 
 .controlGroup span {
     font-weight: bold;
-    color: #00bcd4;
-    width: 45px; /* Give it a fixed width */
+    color: var(--accent-color);
+    width: 60px; /* Wider for values like '50%' */
     text-align: right;
+    font-variant-numeric: tabular-nums; /* Align numbers cleanly */
 }
 
-/* --- NEW --- Styles for camera selector */
+
 #cameraSelectContainer {
     display: none; /* Hidden by default, JS will show it if needed */
+    justify-content: space-between; /* Space out label and select */
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--border-color);
+    padding: 8px 0;
 }
 
 #cameraSelect {
-    flex-grow: 1; /* Take up available space */
-    background-color: #333;
-    color: #e0e0e0;
-    border: 1px solid #555;
+    flex-grow: 1;
+    background-color: var(--bg-light);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
     border-radius: 4px;
-    padding: 5px;
+    padding: 8px 10px;
     cursor: pointer;
+    font-size: 0.9em;
+    outline: none;
+    -webkit-appearance: none; /* Remove default dropdown arrow */
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2300bcd4'%3E%3Cpath fill-rule='evenodd' d='M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' clip-rule='evenodd'%3E%3C/path%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 1em;
+}
+
+#cameraSelect:focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px rgba(0, 188, 212, 0.3);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    body {
+        padding: var(--spacing-md);
+    }
+    h1 {
+        font-size: 1.8em;
+    }
+    .videoContainer {
+        padding-bottom: 75%; /* Maintain aspect ratio */
+    }
+    .controlsContainer {
+        gap: var(--spacing-md);
+        padding: var(--spacing-md);
+    }
+    .controlGroup label {
+        width: 120px; /* Adjust label width for smaller screens */
+        font-size: 0.85em;
+    }
+    .controlGroup span {
+        width: 40px;
+        font-size: 0.9em;
+    }
+    #loadingMessage {
+        font-size: 1em;
+    }
 }

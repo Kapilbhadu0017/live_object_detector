@@ -4,45 +4,42 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Live Object Detector</title>
-    <!-- Links to the external CSS file -->
-    <link rel="stylesheet" href="style.css">
+    <!-- Links to the external CSS file --><link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <h1>Live Object Detector</h1>
+    <main class="container">
+        <h1>Live Object Detector</h1>
 
-    <div id="loadingContainer">
-        <!-- This element is now also used for re-initializing the model -->
-        <div id="loadingMessage">Initializing...</div>
-    </div>
-
-    <div id="liveView" class="videoContainer hidden">
-        <video id="webcam" autoplay playsinline></video>
-        <canvas id="outputCanvas"></canvas>
-    </div>
-
-    <!-- --- Controls for the detector --- -->
-    <div classs="controlsContainer">
-        <!-- --- NEW --- Camera Selector -->
-        <div class="controlGroup" id="cameraSelectContainer">
-            <label for="cameraSelect">Camera:</label>
-            <select id="cameraSelect"></select>
+        <div id="loadingContainer" class="card">
+            <div id="loadingMessage">Initializing...</div>
         </div>
 
-        <div class="controlGroup">
-            <label for="maxResultsSlider">Max Results:</label>
-            <input type="range" id="maxResultsSlider" min="1" max="10" value="5" step="1">
-            <span id="maxResultsValue">5</span>
+        <div id="liveView" class="videoContainer hidden">
+            <video id="webcam" autoplay playsinline></video>
+            <canvas id="outputCanvas"></canvas>
         </div>
-        <div class="controlGroup">
-            <label for="thresholdSlider">Confidence Threshold:</label>
-            <input type="range" id="thresholdSlider" min="0.0" max="1.0" value="0.5" step="0.01">
-            <span id="thresholdValue">50%</span>
-        </div>
-    </div>
 
-    <!-- Links to the external JavaScript file -->
-    <script type="module" src="script.js"></script>
+        <!-- --- Controls for the detector --- --><div class="controlsContainer card">
+            <!-- --- NEW --- Camera Selector --><div class="controlGroup" id="cameraSelectContainer">
+                <label for="cameraSelect">Camera:</label>
+                <select id="cameraSelect"></select>
+            </div>
+
+            <div class="controlGroup">
+                <label for="maxResultsSlider">Max Results:</label>
+                <input type="range" id="maxResultsSlider" min="1" max="10" value="5" step="1">
+                <span id="maxResultsValue">5</span>
+            </div>
+            <div class="controlGroup">
+                <label for="thresholdSlider">Confidence Threshold:</label>
+                <input type="range" id="thresholdSlider" min="0.0" max="1.0" value="0.5" step="0.01">
+                <span id="thresholdValue">50%</span>
+            </div>
+        </div>
+    </main>
+
+    <!-- Links to the external JavaScript file --><script type="module" src="script.js"></script>
 
 </body>
 </html>
