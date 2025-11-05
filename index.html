@@ -33,6 +33,15 @@
         <!-- --- Controls for the detector --- -->
         <div class="controlsContainer card">
             
+            <!-- --- NEW --- Model Quality Selector -->
+            <div class="controlGroup">
+                <label for="modelSelect">Model Quality:</label>
+                <select id="modelSelect">
+                    <option value="efficientdet_lite2.tflite" selected>High Quality (Slow)</option>
+                    <option value="efficientdet_lite0.tflite">Low Quality (Fast)</option>
+                </select>
+            </div>
+            
             <!-- Camera Selector -->
             <div class="controlGroup" id="cameraSelectContainer">
                 <label for="cameraSelect">Camera:</label>
@@ -53,7 +62,7 @@
                 <span id="thresholdValue">50%</span>
             </div>
             
-            <!-- --- NEW --- Flip Video Button -->
+            <!-- Flip Video Button -->
             <div class="controlGroup">
                 <label for="flipButton">Video Feed:</label>
                 <button id="flipButton" class="button">Flip Video</button>

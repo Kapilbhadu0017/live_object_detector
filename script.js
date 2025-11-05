@@ -25,6 +25,9 @@ const loadingContainer = document.getElementById("loadingContainer");
 const loadingMessage = document.getElementById("loadingMessage");
 const liveView = document.getElementById("liveView");
 
+// --- NEW --- Model selector element
+const modelSelect = document.getElementById("modelSelect");
+
 // --- Slider elements ---
 const maxResultsSlider = document.getElementById("maxResultsSlider");
 const maxResultsValue = document.getElementById("maxResultsValue");
@@ -35,7 +38,7 @@ const thresholdValue = document.getElementById("thresholdValue");
 const cameraSelectContainer = document.getElementById("cameraSelectContainer");
 const cameraSelect = document.getElementById("cameraSelect");
 
-// --- NEW --- Flip button element
+// --- Flip button element ---
 const flipButton = document.getElementById("flipButton");
 
 // --- Video overlay elements ---
@@ -46,9 +49,10 @@ let objectDetector;
 let lastVideoTime = -1;
 let currentStream = null;
 let currentDeviceId = null;
-let isVideoFlipped = false; // --- NEW --- State for video flip
+let isVideoFlipped = false; 
 
-// Variables to store the last *applied* slider values
+// Variables to store the last *applied* settings
+let lastModel = ""; // --- NEW ---
 let lastMaxResults = -1;
 let lastThreshold = -1.0;
 
@@ -62,11 +66,13 @@ async function setupApp() {
 
         // 2. Function to create/re-create the detector
         async function createOrUpdateDetector(isInitialLoad = false) {
-            // Get current values from sliders
+            // Get current values from ALL controls
+            const modelPath = modelSelect.value; // --- NEW ---
             const maxResults = parseInt(maxResultsSlider.value, 10);
             const scoreThreshold = parseFloat(thresholdSlider.value);
             
             // Store these values as the "last applied" settings
+            lastModel = modelPath; // --- NEW ---
             lastMaxResults = maxResults;
             lastThreshold = scoreThreshold;
             
@@ -86,12 +92,12 @@ async function setupApp() {
             // Create the ObjectDetector with the new settings
             objectDetector = await ObjectDetector.createFromOptions(vision, {
                 baseOptions: {
-                    modelAssetPath: "efficientdet_lite2.tflite", // Load local model
+                    modelAssetPath: modelPath, // --- MODIFIED --- Load selected model
                     delegate: "GPU"
                 },
                 runningMode: "VIDEO",
-                scoreThreshold: scoreThreshold, // Use slider value
-                maxResults: maxResults          // Use slider value
+                scoreThreshold: scoreThreshold, 
+                maxResults: maxResults          
             });
             
             // Hide the correct loading message
@@ -129,10 +135,19 @@ async function setupApp() {
         maxResultsSlider.addEventListener("change", handleSliderChange);
         thresholdSlider.addEventListener("change", handleSliderChange);
 
+        // --- NEW --- Add event listener for model selector
+        const handleModelChange = async () => {
+            if (modelSelect.value !== lastModel) {
+                await createOrUpdateDetector(false);
+            }
+        };
+        modelSelect.addEventListener("change", handleModelChange);
+        // --- End New ---
+
         // Add event listener for camera selector
         cameraSelect.addEventListener('change', switchCamera);
         
-        // --- NEW --- Add event listener for flip button
+        // Add event listener for flip button
         flipButton.addEventListener("click", () => {
             isVideoFlipped = !isVideoFlipped; // Toggle the state
             video.classList.toggle("flipped", isVideoFlipped); // Toggle the CSS class
@@ -189,7 +204,7 @@ async function switchCamera() {
     overlayMessage.textContent = "Switching camera...";
     videoOverlay.classList.remove("hidden");
     
-    // --- NEW --- Auto-set flip state based on the selected camera
+    // Auto-set flip state based on the selected camera
     try {
         const devices = await navigator.mediaDevices.enumerateDevices();
         const selectedDevice = devices.find(d => d.deviceId === currentDeviceId && d.kind === 'videoinput');
@@ -206,14 +221,12 @@ async function switchCamera() {
         isVideoFlipped = false;
         video.classList.toggle("flipped", isVideoFlipped);
     }
-    // --- End New Logic ---
 
     await enableWebcam(); // Re-run the webcam setup with the new device ID
     
     videoOverlay.classList.add("hidden");
 }
 
-// --- MODIFIED --- This function now handles stream switching and auto-flip on load
 async function enableWebcam() {
     // 1. Stop any existing stream
     if (currentStream) {
@@ -286,7 +299,15 @@ async function populateCameraList() {
     videoDevices.forEach(device => {
         const option = document.createElement('option');
         option.value = device.deviceId;
-        option.textContent = device.label || `Camera ${cameraSelect.options.length + 1}`;
+        
+        // --- MODIFIED --- Clean up camera labels
+        let label = device.label || `Camera ${cameraSelect.options.length + 1}`;
+        // Try to be smarter about labels
+        if (device.facingMode) {
+            label = `${label.split('(')[0].trim()} (${device.facingMode})`;
+        }
+        option.textContent = label;
+        // --- End modification ---
         
         // Pre-select the one that is currently active
         if (device.deviceId === activeStreamDeviceId) {
@@ -324,7 +345,6 @@ async function predictWebcam() {
                 canvasCtx.strokeStyle = "#00bcd4";
                 canvasCtx.lineWidth = 2;
                 
-                // --- MODIFIED ---
                 // Calculate X coordinate based on whether the video is flipped
                 let true_x = detection.boundingBox.originX;
                 if (isVideoFlipped) {
