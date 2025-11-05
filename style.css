@@ -1,0 +1,132 @@
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: #121212;
+    color: #e0e0e0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    /* justify-content: center; */ /* Remove center to allow stacking */
+    padding-top: 2vh; /* Add some padding at the top */
+    min-height: 100vh;
+    margin: 0;
+    box-sizing: border-box;
+}
+
+h1 {
+    font-weight: 300;
+    letter-spacing: 1px;
+    margin-top: 0;
+    margin-bottom: 20px;
+}
+
+#loadingContainer {
+    width: 80%;
+    max-width: 500px;
+    text-align: center;
+    /* --- NEW --- Add positioning to overlay nicely */
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 20; /* Make sure it's on top of the video */
+    background: rgba(18, 18, 18, 0.8);
+    padding: 20px;
+    border-radius: 8px;
+}
+
+/* --- NEW --- Hide loading container by default, script will show it */
+#loadingContainer.hidden {
+    display: none;
+}
+
+#loadingMessage {
+    font-size: 1.2em;
+    color: #00bcd4; /* A bright cyan color */
+    margin-bottom: 10px;
+}
+
+.videoContainer {
+    position: relative;
+    width: 640px;
+    height: 480px;
+    max-width: 90vw; /* Ensure it fits on mobile */
+    border: 2px solid #00bcd4;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #000; /* Add a black background for loading */
+}
+
+/* --- MODIFIED --- Only hide with .hidden class */
+.videoContainer.hidden {
+    display: none;
+}
+
+video, canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+video {
+    /* This flips the video like a mirror */
+    transform: scaleX(-1);
+}
+
+canvas {
+    z-index: 10;
+}
+
+
+/* --- Styles for the slider controls --- */
+.controlsContainer {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    width: 640px;
+    max-width: 90vw; /* Match video width */
+    margin-top: 20px;
+    padding: 20px;
+    background-color: #222;
+    border-radius: 8px;
+    box-sizing: border-box; /* Include padding in width */
+}
+
+.controlGroup {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.controlGroup label {
+    flex-shrink: 0; /* Don't let label shrink */
+    font-size: 0.9em;
+}
+
+.controlGroup input[type="range"] {
+    flex-grow: 1; /* Let slider take remaining space */
+    cursor: pointer;
+}
+
+.controlGroup span {
+    font-weight: bold;
+    color: #00bcd4;
+    width: 45px; /* Give it a fixed width */
+    text-align: right;
+}
+
+/* --- NEW --- Styles for camera selector */
+#cameraSelectContainer {
+    display: none; /* Hidden by default, JS will show it if needed */
+}
+
+#cameraSelect {
+    flex-grow: 1; /* Take up available space */
+    background-color: #333;
+    color: #e0e0e0;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 5px;
+    cursor: pointer;
+}
