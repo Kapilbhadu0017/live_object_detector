@@ -35,7 +35,7 @@ const thresholdValue = document.getElementById("thresholdValue");
 const cameraSelectContainer = document.getElementById("cameraSelectContainer");
 const cameraSelect = document.getElementById("cameraSelect");
 
-// --- NEW --- Video overlay elements
+// --- Video overlay elements ---
 const videoOverlay = document.getElementById("videoOverlay");
 const overlayMessage = document.getElementById("overlayMessage");
 
@@ -43,6 +43,10 @@ let objectDetector;
 let lastVideoTime = -1;
 let currentStream = null;
 let currentDeviceId = null;
+
+// --- NEW --- Variables to store the last *applied* slider values
+let lastMaxResults = -1;
+let lastThreshold = -1.0;
 
 
 // --- Main Function --- //
@@ -53,26 +57,26 @@ async function setupApp() {
         const { ObjectDetector } = await loadMediaPipe();
 
         // 2. Function to create/re-create the detector
-        // --- MODIFIED --- Added a flag to know if it's the first load
         async function createOrUpdateDetector(isInitialLoad = false) {
             // Get current values from sliders
             const maxResults = parseInt(maxResultsSlider.value, 10);
             const scoreThreshold = parseFloat(thresholdSlider.value);
             
-            // Update UI labels
+            // --- NEW --- Store these values as the "last applied" settings
+            lastMaxResults = maxResults;
+            lastThreshold = scoreThreshold;
+            
+            // Update UI labels (good for initial load)
             maxResultsValue.textContent = maxResults;
             thresholdValue.textContent = `${Math.round(scoreThreshold * 100)}%`;
             
-            // --- MODIFIED ---
-            // Show the correct loading message (card for initial, overlay for update)
+            // Show the correct loading message
             if (isInitialLoad) {
                 loadingMessage.textContent = "Initializing AI model...";
                 loadingContainer.classList.remove("hidden");
             } else {
                 overlayMessage.textContent = "Updating AI model...";
                 videoOverlay.classList.remove("hidden");
-                // --- REMOVED ---
-                // liveView.classList.add("hidden"); // <-- This was the line causing the flash
             }
 
             // Create the ObjectDetector with the new settings
@@ -86,28 +90,45 @@ async function setupApp() {
                 maxResults: maxResults          // Use slider value
             });
             
-            // --- MODIFIED ---
             // Hide the correct loading message
             if (isInitialLoad) {
                 loadingContainer.classList.add("hidden");
                 liveView.classList.remove("hidden"); // Show video for the first time
             } else {
                 videoOverlay.classList.add("hidden");
-                // --- REMOVED ---
-                // liveView.classList.remove("hidden"); // <-- Video was never hidden
             }
         }
         
         // 3. Add event listeners to sliders
-        // --- MODIFIED --- Pass `false` to indicate it's *not* the initial load
-        maxResultsSlider.addEventListener("input", () => createOrUpdateDetector(false));
-        thresholdSlider.addEventListener("input", () => createOrUpdateDetector(false));
+        
+        // --- NEW --- Listen for 'input' (smooth dragging) to update *only* the text labels
+        maxResultsSlider.addEventListener("input", () => {
+            maxResultsValue.textContent = maxResultsSlider.value;
+        });
+        
+        thresholdSlider.addEventListener("input", () => {
+            const threshold = parseFloat(thresholdSlider.value);
+            thresholdValue.textContent = `${Math.round(threshold * 100)}%`;
+        });
+
+        // --- NEW --- Listen for 'change' (on release) to update the *actual* model
+        const handleSliderChange = async () => {
+            const newMaxResults = parseInt(maxResultsSlider.value, 10);
+            const newThreshold = parseFloat(thresholdSlider.value);
+            
+            // Only update if the values are different from the last *applied* settings
+            if (newMaxResults !== lastMaxResults || newThreshold !== lastThreshold) {
+                await createOrUpdateDetector(false);
+            }
+        };
+        
+        maxResultsSlider.addEventListener("change", handleSliderChange);
+        thresholdSlider.addEventListener("change", handleSliderChange);
 
         // Add event listener for camera selector
         cameraSelect.addEventListener('change', switchCamera);
         
         // 4. Create the detector for the first time
-        // --- MODIFIED --- Pass `true` to indicate it *is* the initial load
         await createOrUpdateDetector(true);
 
         // 5. Start the webcam (which also populates the camera list)
