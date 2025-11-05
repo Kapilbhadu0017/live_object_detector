@@ -104,21 +104,26 @@ video, canvas {
     left: 0;
     width: 100%;
     height: 100%;
-    /* --- FIX --- */
-    /* REMOVED transform: scaleX(-1) from this shared rule */
 }
 
-/* --- NEW --- */
-/* Apply the mirror effect ONLY to the video element */
+/* --- MODIFIED --- */
+/* Video is NOT flipped by default */
 video {
+    transition: transform 0.3s ease; /* Smooth flip effect */
+}
+
+/* This class will be toggled by JS */
+video.flipped {
     transform: scaleX(-1);
 }
+/* --- End of modification --- */
+
 
 canvas {
     z-index: 10;
 }
 
-/* --- NEW --- Styles for the video overlay */
+/* --- Styles for the video overlay --- */
 .videoOverlay {
     position: absolute;
     top: 0;
@@ -160,7 +165,6 @@ canvas {
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
-/* --- End of new styles --- */
 
 
 .controlsContainer {
@@ -262,6 +266,39 @@ canvas {
     border-color: var(--accent-color);
     box-shadow: 0 0 0 2px rgba(0, 188, 212, 0.3);
 }
+
+/* --- NEW --- Button styling */
+.button {
+    flex-grow: 1; /* Take up available space like the select box */
+    padding: 10px;
+    font-size: 0.9em;
+    font-weight: bold;
+    color: var(--accent-color);
+    background-color: var(--bg-light);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    text-align: center;
+    transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
+    outline: none;
+}
+
+.button:hover {
+    background-color: var(--bg-dark);
+    border-color: var(--accent-color);
+}
+
+.button:active {
+    transform: scale(0.98); /* Click effect */
+    box-shadow: 0 0 5px rgba(0, 188, 212, 0.5);
+}
+
+.button:focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px rgba(0, 188, 212, 0.3);
+}
+/* --- End of new styles --- */
+
 
 /* Responsive adjustments */
 @media (max-width: 768px) {

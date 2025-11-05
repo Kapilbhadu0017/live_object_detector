@@ -35,6 +35,9 @@ const thresholdValue = document.getElementById("thresholdValue");
 const cameraSelectContainer = document.getElementById("cameraSelectContainer");
 const cameraSelect = document.getElementById("cameraSelect");
 
+// --- NEW --- Flip button element
+const flipButton = document.getElementById("flipButton");
+
 // --- Video overlay elements ---
 const videoOverlay = document.getElementById("videoOverlay");
 const overlayMessage = document.getElementById("overlayMessage");
@@ -43,8 +46,9 @@ let objectDetector;
 let lastVideoTime = -1;
 let currentStream = null;
 let currentDeviceId = null;
+let isVideoFlipped = false; // --- NEW --- State for video flip
 
-// --- NEW --- Variables to store the last *applied* slider values
+// Variables to store the last *applied* slider values
 let lastMaxResults = -1;
 let lastThreshold = -1.0;
 
@@ -62,7 +66,7 @@ async function setupApp() {
             const maxResults = parseInt(maxResultsSlider.value, 10);
             const scoreThreshold = parseFloat(thresholdSlider.value);
             
-            // --- NEW --- Store these values as the "last applied" settings
+            // Store these values as the "last applied" settings
             lastMaxResults = maxResults;
             lastThreshold = scoreThreshold;
             
@@ -99,9 +103,9 @@ async function setupApp() {
             }
         }
         
-        // 3. Add event listeners to sliders
+        // 3. Add event listeners
         
-        // --- NEW --- Listen for 'input' (smooth dragging) to update *only* the text labels
+        // Listen for 'input' (smooth dragging) to update *only* the text labels
         maxResultsSlider.addEventListener("input", () => {
             maxResultsValue.textContent = maxResultsSlider.value;
         });
@@ -111,7 +115,7 @@ async function setupApp() {
             thresholdValue.textContent = `${Math.round(threshold * 100)}%`;
         });
 
-        // --- NEW --- Listen for 'change' (on release) to update the *actual* model
+        // Listen for 'change' (on release) to update the *actual* model
         const handleSliderChange = async () => {
             const newMaxResults = parseInt(maxResultsSlider.value, 10);
             const newThreshold = parseFloat(thresholdSlider.value);
@@ -127,6 +131,12 @@ async function setupApp() {
 
         // Add event listener for camera selector
         cameraSelect.addEventListener('change', switchCamera);
+        
+        // --- NEW --- Add event listener for flip button
+        flipButton.addEventListener("click", () => {
+            isVideoFlipped = !isVideoFlipped; // Toggle the state
+            video.classList.toggle("flipped", isVideoFlipped); // Toggle the CSS class
+        });
         
         // 4. Create the detector for the first time
         await createOrUpdateDetector(true);
@@ -176,17 +186,34 @@ setupApp();
 // --- Function to handle camera switching ---
 async function switchCamera() {
     currentDeviceId = cameraSelect.value;
-    // Show the overlay while the camera switches
     overlayMessage.textContent = "Switching camera...";
     videoOverlay.classList.remove("hidden");
     
+    // --- NEW --- Auto-set flip state based on the selected camera
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const selectedDevice = devices.find(d => d.deviceId === currentDeviceId && d.kind === 'videoinput');
+        
+        if (selectedDevice && selectedDevice.facingMode === 'user') {
+            isVideoFlipped = true;
+        } else {
+            isVideoFlipped = false; // Default for 'environment' (back) or unknown
+        }
+        video.classList.toggle("flipped", isVideoFlipped); // Apply CSS class
+    } catch (e) {
+        console.error("Could not enumerate devices to set flip state:", e);
+        // Default to not flipped if detection fails
+        isVideoFlipped = false;
+        video.classList.toggle("flipped", isVideoFlipped);
+    }
+    // --- End New Logic ---
+
     await enableWebcam(); // Re-run the webcam setup with the new device ID
     
-    // Hide the overlay once the new stream is loaded
     videoOverlay.classList.add("hidden");
 }
 
-// --- MODIFIED --- This function now handles stream switching and list population
+// --- MODIFIED --- This function now handles stream switching and auto-flip on load
 async function enableWebcam() {
     // 1. Stop any existing stream
     if (currentStream) {
@@ -214,9 +241,21 @@ async function enableWebcam() {
         video.removeEventListener("loadeddata", predictWebcam);
         video.addEventListener("loadeddata", predictWebcam);
         
-        // 5. Populate the camera list *only if it's the first time*
+        // 5. Populate camera list and set initial flip state *only if it's the first time*
         if (cameraSelect.options.length === 0) {
-            await populateCameraList();
+            await populateCameraList(); // This populates list AND sets currentDeviceId
+            
+            // Now that currentDeviceId is set, find the active device
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const activeDevice = devices.find(d => d.deviceId === currentDeviceId && d.kind === 'videoinput');
+
+            // Set default flip state
+            if (activeDevice && activeDevice.facingMode === 'user') {
+                isVideoFlipped = true;
+            } else {
+                isVideoFlipped = false; // Default for 'environment' (back) or unknown
+            }
+            video.classList.toggle("flipped", isVideoFlipped);
         }
 
     } catch (error) {
@@ -285,8 +324,12 @@ async function predictWebcam() {
                 canvasCtx.strokeStyle = "#00bcd4";
                 canvasCtx.lineWidth = 2;
                 
-                // Flip the X-coordinate for the mirrored video
-                const true_x = canvas.width - detection.boundingBox.originX - detection.boundingBox.width;
+                // --- MODIFIED ---
+                // Calculate X coordinate based on whether the video is flipped
+                let true_x = detection.boundingBox.originX;
+                if (isVideoFlipped) {
+                    true_x = canvas.width - detection.boundingBox.originX - detection.boundingBox.width;
+                }
                 
                 canvasCtx.rect(
                     true_x,
@@ -302,6 +345,7 @@ async function predictWebcam() {
                 canvasCtx.font = "16px Arial";
                 const textWidth = canvasCtx.measureText(label).width;
                 
+                // The label drawing logic is based on true_x, so it flips automatically
                 canvasCtx.fillStyle = "rgba(0, 0, 0, 0.7)";
                 canvasCtx.fillRect(true_x - 1, detection.boundingBox.originY - 20, textWidth + 10, 20);
                 

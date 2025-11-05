@@ -22,7 +22,7 @@
             <video id="webcam" autoplay playsinline></video>
             <canvas id="outputCanvas"></canvas>
             
-            <!-- --- NEW --- This is the overlay for re-loading the model -->
+            <!-- This is the overlay for re-loading the model -->
             <div id="videoOverlay" class="videoOverlay hidden">
                 <div class="overlaySpinner"></div>
                 <div id="overlayMessage">Updating AI model...</div>
@@ -51,6 +51,12 @@
                 <label for="thresholdSlider">Confidence Threshold:</label>
                 <input type="range" id="thresholdSlider" min="0.0" max="1.0" value="0.5" step="0.01">
                 <span id="thresholdValue">50%</span>
+            </div>
+            
+            <!-- --- NEW --- Flip Video Button -->
+            <div class="controlGroup">
+                <label for="flipButton">Video Feed:</label>
+                <button id="flipButton" class="button">Flip Video</button>
             </div>
         </div>
     </main>
