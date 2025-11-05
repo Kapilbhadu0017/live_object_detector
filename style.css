@@ -104,7 +104,14 @@ video, canvas {
     left: 0;
     width: 100%;
     height: 100%;
-    transform: scaleX(-1); /* Flips video like a mirror */
+    /* --- FIX --- */
+    /* REMOVED transform: scaleX(-1) from this shared rule */
+}
+
+/* --- NEW --- */
+/* Apply the mirror effect ONLY to the video element */
+video {
+    transform: scaleX(-1);
 }
 
 canvas {
