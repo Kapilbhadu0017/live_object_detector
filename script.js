@@ -1,6 +1,6 @@
 // --- FINAL VERSION: Load all files locally ---
 
-// --- NEW --- Global variable to hold the vision libraries
+// --- Global variable to hold the vision libraries
 let vision;
 
 async function loadMediaPipe() {
@@ -31,13 +31,16 @@ const maxResultsValue = document.getElementById("maxResultsValue");
 const thresholdSlider = document.getElementById("thresholdSlider");
 const thresholdValue = document.getElementById("thresholdValue");
 
-// --- NEW --- Camera selector elements
+// --- Camera selector elements ---
 const cameraSelectContainer = document.getElementById("cameraSelectContainer");
 const cameraSelect = document.getElementById("cameraSelect");
 
+// --- NEW --- Video overlay elements
+const videoOverlay = document.getElementById("videoOverlay");
+const overlayMessage = document.getElementById("overlayMessage");
+
 let objectDetector;
 let lastVideoTime = -1;
-// --- NEW --- Globals for camera stream
 let currentStream = null;
 let currentDeviceId = null;
 
@@ -50,7 +53,8 @@ async function setupApp() {
         const { ObjectDetector } = await loadMediaPipe();
 
         // 2. Function to create/re-create the detector
-        async function createOrUpdateDetector() {
+        // --- MODIFIED --- Added a flag to know if it's the first load
+        async function createOrUpdateDetector(isInitialLoad = false) {
             // Get current values from sliders
             const maxResults = parseInt(maxResultsSlider.value, 10);
             const scoreThreshold = parseFloat(thresholdSlider.value);
@@ -59,10 +63,17 @@ async function setupApp() {
             maxResultsValue.textContent = maxResults;
             thresholdValue.textContent = `${Math.round(scoreThreshold * 100)}%`;
             
-            // Show loading message while detector is created
-            loadingMessage.textContent = "Initializing AI model...";
-            loadingContainer.classList.remove("hidden");
-            liveView.classList.add("hidden");
+            // --- MODIFIED ---
+            // Show the correct loading message (card for initial, overlay for update)
+            if (isInitialLoad) {
+                loadingMessage.textContent = "Initializing AI model...";
+                loadingContainer.classList.remove("hidden");
+            } else {
+                overlayMessage.textContent = "Updating AI model...";
+                videoOverlay.classList.remove("hidden");
+                // --- REMOVED ---
+                // liveView.classList.add("hidden"); // <-- This was the line causing the flash
+            }
 
             // Create the ObjectDetector with the new settings
             objectDetector = await ObjectDetector.createFromOptions(vision, {
@@ -75,28 +86,38 @@ async function setupApp() {
                 maxResults: maxResults          // Use slider value
             });
             
-            // Hide loading message
-            loadingContainer.classList.add("hidden");
-            liveView.classList.remove("hidden");
+            // --- MODIFIED ---
+            // Hide the correct loading message
+            if (isInitialLoad) {
+                loadingContainer.classList.add("hidden");
+                liveView.classList.remove("hidden"); // Show video for the first time
+            } else {
+                videoOverlay.classList.add("hidden");
+                // --- REMOVED ---
+                // liveView.classList.remove("hidden"); // <-- Video was never hidden
+            }
         }
         
         // 3. Add event listeners to sliders
-        maxResultsSlider.addEventListener("input", createOrUpdateDetector);
-        thresholdSlider.addEventListener("input", createOrUpdateDetector);
+        // --- MODIFIED --- Pass `false` to indicate it's *not* the initial load
+        maxResultsSlider.addEventListener("input", () => createOrUpdateDetector(false));
+        thresholdSlider.addEventListener("input", () => createOrUpdateDetector(false));
 
-        // --- NEW --- Add event listener for camera selector
+        // Add event listener for camera selector
         cameraSelect.addEventListener('change', switchCamera);
         
         // 4. Create the detector for the first time
-        await createOrUpdateDetector();
+        // --- MODIFIED --- Pass `true` to indicate it *is* the initial load
+        await createOrUpdateDetector(true);
 
         // 5. Start the webcam (which also populates the camera list)
         await enableWebcam();
 
     } catch (error) {
-        // ... (existing error handling code) ...
         console.error("Error during setup:", error);
+        
         let detailedMessage = "An unknown error occurred.";
+
         if (error instanceof Error) {
             detailedMessage = `JavaScript Error: ${error.message}`;
         } else if (error && error.type === 'error') {
@@ -114,6 +135,7 @@ async function setupApp() {
                 detailedMessage = `An unexpected error object was caught: ${error.toString()}`;
             }
         }
+
         loadingMessage.innerHTML = `<strong>Error loading dependencies:</strong><br>${detailedMessage}<br><br>Please check the browser console (F12) for more details and then refresh.`;
         loadingMessage.style.color = "#FF5252";
         loadingMessage.style.textAlign = "left";
@@ -121,16 +143,26 @@ async function setupApp() {
         loadingMessage.style.border = "1px solid #FF5252";
         loadingMessage.style.borderRadius = "8px";
         loadingMessage.style.backgroundColor = "rgba(255, 82, 82, 0.1)";
+        
+        // Ensure the loading container is visible to show the error
+        loadingContainer.classList.remove("hidden");
     }
 }
 
 // Start the whole process
 setupApp();
 
-// --- NEW --- Function to handle camera switching
+// --- Function to handle camera switching ---
 async function switchCamera() {
     currentDeviceId = cameraSelect.value;
+    // Show the overlay while the camera switches
+    overlayMessage.textContent = "Switching camera...";
+    videoOverlay.classList.remove("hidden");
+    
     await enableWebcam(); // Re-run the webcam setup with the new device ID
+    
+    // Hide the overlay once the new stream is loaded
+    videoOverlay.classList.add("hidden");
 }
 
 // --- MODIFIED --- This function now handles stream switching and list population
@@ -147,7 +179,6 @@ async function enableWebcam() {
         video: {
             width: 640,
             height: 480,
-            // If a device ID is selected, use it. Otherwise, let the browser choose.
             ...(currentDeviceId && { deviceId: { exact: currentDeviceId } })
         }
     };
@@ -175,7 +206,7 @@ async function enableWebcam() {
     }
 }
 
-// --- NEW --- Helper function to get camera list
+// --- Helper function to get camera list ---
 async function populateCameraList() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
         console.warn("enumerateDevices() is not supported.");

@@ -4,13 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Live Object Detector</title>
-    <!-- Links to the external CSS file --><link rel="stylesheet" href="style.css">
+    
+    <!-- Links to the external CSS file -->
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <main class="container">
         <h1>Live Object Detector</h1>
 
+        <!-- This is for the *initial* page load and error messages -->
         <div id="loadingContainer" class="card">
             <div id="loadingMessage">Initializing...</div>
         </div>
@@ -18,19 +21,32 @@
         <div id="liveView" class="videoContainer hidden">
             <video id="webcam" autoplay playsinline></video>
             <canvas id="outputCanvas"></canvas>
+            
+            <!-- --- NEW --- This is the overlay for re-loading the model -->
+            <div id="videoOverlay" class="videoOverlay hidden">
+                <div class="overlaySpinner"></div>
+                <div id="overlayMessage">Updating AI model...</div>
+            </div>
         </div>
 
-        <!-- --- Controls for the detector --- --><div class="controlsContainer card">
-            <!-- --- NEW --- Camera Selector --><div class="controlGroup" id="cameraSelectContainer">
+        
+        <!-- --- Controls for the detector --- -->
+        <div class="controlsContainer card">
+            
+            <!-- Camera Selector -->
+            <div class="controlGroup" id="cameraSelectContainer">
                 <label for="cameraSelect">Camera:</label>
                 <select id="cameraSelect"></select>
             </div>
 
+            <!-- Max Results Slider -->
             <div class="controlGroup">
                 <label for="maxResultsSlider">Max Results:</label>
                 <input type="range" id="maxResultsSlider" min="1" max="10" value="5" step="1">
                 <span id="maxResultsValue">5</span>
             </div>
+            
+            <!-- Confidence Threshold Slider -->
             <div class="controlGroup">
                 <label for="thresholdSlider">Confidence Threshold:</label>
                 <input type="range" id="thresholdSlider" min="0.0" max="1.0" value="0.5" step="0.01">
@@ -39,7 +55,9 @@
         </div>
     </main>
 
-    <!-- Links to the external JavaScript file --><script type="module" src="script.js"></script>
+    
+    <!-- Links to the external JavaScript file -->
+    <script type="module" src="script.js"></script>
 
 </body>
 </html>

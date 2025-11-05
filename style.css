@@ -111,6 +111,50 @@ canvas {
     z-index: 10;
 }
 
+/* --- NEW --- Styles for the video overlay */
+.videoOverlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 15; /* Above canvas (10), below loadingContainer (20) */
+    
+    /* Styling for the overlay */
+    background-color: rgba(26, 26, 26, 0.7); /* Translucent dark bg */
+    backdrop-filter: blur(5px); /* Modern blur effect */
+    
+    /* Centering content */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    
+    color: var(--accent-color);
+    font-size: 1.2em;
+    font-weight: 300;
+}
+
+.videoOverlay.hidden {
+    display: none;
+}
+
+/* Simple CSS spinner */
+.overlaySpinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid rgba(224, 224, 224, 0.3); /* Light grey border */
+    border-top-color: var(--accent-color); /* Cyan spinner color */
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+/* --- End of new styles --- */
+
 
 .controlsContainer {
     display: flex;
@@ -220,9 +264,7 @@ canvas {
     h1 {
         font-size: 1.8em;
     }
-    .videoContainer {
-        padding-bottom: 75%; /* Maintain aspect ratio */
-    }
+    /* videoContainer already has responsive aspect ratio */
     .controlsContainer {
         gap: var(--spacing-md);
         padding: var(--spacing-md);
