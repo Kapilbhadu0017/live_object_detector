@@ -85,7 +85,7 @@ h1 {
 .videoContainer {
     position: relative;
     width: 100%;
-    /* 4:3 aspect ratio (480 / 640 = 0.75) */
+    /* 4:3 aspect ratio (480 / 640 = 0.75) for DESKTOP */
     padding-bottom: 75%; 
     height: 0; /* Remove fixed height */
     overflow: hidden;
@@ -106,17 +106,17 @@ video, canvas {
     height: 100%;
 }
 
-/* --- MODIFIED --- */
-/* Video is NOT flipped by default */
 video {
     transition: transform 0.3s ease; /* Smooth flip effect */
+    /* --- FIX --- */
+    /* This prevents the video from squeezing */
+    object-fit: cover; 
 }
 
 /* This class will be toggled by JS */
 video.flipped {
     transform: scaleX(-1);
 }
-/* --- End of modification --- */
 
 
 canvas {
@@ -256,7 +256,7 @@ canvas {
     -webkit-appearance: none; /* Remove default dropdown arrow */
     -moz-appearance: none;
     appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2300bcd4'%3E%3Cpath fill-rule='evenodd' d='M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' clip-rule='evenodd'%3E%3C/path%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w0.org/2000/svg' viewBox='0 0 20 20' fill='%2300bcd4'%3E%3Cpath fill-rule='evenodd' d='M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' clip-rule='evenodd'%3E%3C/path%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 10px center;
     background-size: 1em;
@@ -267,7 +267,6 @@ canvas {
     box-shadow: 0 0 0 2px rgba(0, 188, 212, 0.3);
 }
 
-/* --- NEW --- Button styling */
 .button {
     flex-grow: 1; /* Take up available space like the select box */
     padding: 10px;
@@ -297,7 +296,6 @@ canvas {
     border-color: var(--accent-color);
     box-shadow: 0 0 0 2px rgba(0, 188, 212, 0.3);
 }
-/* --- End of new styles --- */
 
 
 /* Responsive adjustments */
@@ -308,7 +306,14 @@ canvas {
     h1 {
         font-size: 1.8em;
     }
-    /* videoContainer already has responsive aspect ratio */
+
+    /* --- MODIFIED --- */
+    .videoContainer {
+        padding-bottom: 0;  /* Remove aspect ratio padding */
+        height: 60vh;       /* Set height to 60% of viewport height */
+    }
+    /* --- End of modification --- */
+
     .controlsContainer {
         gap: var(--spacing-md);
         padding: var(--spacing-md);
