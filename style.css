@@ -122,7 +122,7 @@ canvas {
     z-index: 10;
 }
 
-/* --- Styles for the video overlay --- */
+/* --- Styles for all video overlays --- */
 .videoOverlay {
     position: absolute;
     top: 0;
@@ -164,6 +164,45 @@ canvas {
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
+
+/* --- NEW --- Styles for permission overlay */
+#permissionOverlay {
+    backdrop-filter: blur(8px); /* Make it a bit stronger */
+}
+
+.permissionContent {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-md);
+    text-align: center;
+    background: var(--bg-medium);
+    padding: var(--spacing-lg);
+    border-radius: var(--border-radius);
+    box-shadow: 0 4px 15px var(--shadow-color);
+    border: 1px solid var(--border-color);
+    max-width: 80%;
+}
+
+.permissionContent h3 {
+    margin: 0;
+    color: var(--accent-color);
+    font-weight: 500;
+}
+
+.permissionContent p {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 0.9em;
+    line-height: 1.5;
+}
+
+#permissionButton {
+    flex-grow: 0; /* Don't let it grow */
+    width: 200px;
+    padding: 12px;
+}
+/* --- End new styles --- */
 
 
 .controlsContainer {
@@ -242,7 +281,7 @@ canvas {
     padding: 8px 0;
 }
 
-/* --- NEW --- Shared style for all select dropdowns */
+/* Shared style for all select dropdowns */
 #cameraSelect,
 #modelSelect {
     flex-grow: 1;
@@ -257,7 +296,7 @@ canvas {
     -webkit-appearance: none; /* Remove default dropdown arrow */
     -moz-appearance: none;
     appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2300bcd4'%3E%3Cpath fill-rule='evenodd' d='M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' clip-rule='evenodd'%3E%3C/path%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w0.org/2000/svg' viewBox='0 0 20 20' fill='%2300bcd4'%3E%3Cpath fill-rule='evenodd' d='M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' clip-rule='evenodd'%3E%3C/path%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 10px center;
     background-size: 1em;
@@ -268,7 +307,6 @@ canvas {
     border-color: var(--accent-color);
     box-shadow: 0 0 0 2px rgba(0, 188, 212, 0.3);
 }
-/* --- End of new styles --- */
 
 .button {
     flex-grow: 1; /* Take up available space like the select box */

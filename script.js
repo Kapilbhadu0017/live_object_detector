@@ -25,25 +25,24 @@ const loadingContainer = document.getElementById("loadingContainer");
 const loadingMessage = document.getElementById("loadingMessage");
 const liveView = document.getElementById("liveView");
 
-// --- NEW --- Model selector element
 const modelSelect = document.getElementById("modelSelect");
 
-// --- Slider elements ---
 const maxResultsSlider = document.getElementById("maxResultsSlider");
 const maxResultsValue = document.getElementById("maxResultsValue");
 const thresholdSlider = document.getElementById("thresholdSlider");
 const thresholdValue = document.getElementById("thresholdValue");
 
-// --- Camera selector elements ---
 const cameraSelectContainer = document.getElementById("cameraSelectContainer");
 const cameraSelect = document.getElementById("cameraSelect");
 
-// --- Flip button element ---
 const flipButton = document.getElementById("flipButton");
 
-// --- Video overlay elements ---
 const videoOverlay = document.getElementById("videoOverlay");
 const overlayMessage = document.getElementById("overlayMessage");
+
+// --- NEW --- Permission overlay elements
+const permissionOverlay = document.getElementById("permissionOverlay");
+const permissionButton = document.getElementById("permissionButton");
 
 let objectDetector;
 let lastVideoTime = -1;
@@ -52,7 +51,7 @@ let currentDeviceId = null;
 let isVideoFlipped = false; 
 
 // Variables to store the last *applied* settings
-let lastModel = ""; // --- NEW ---
+let lastModel = "";
 let lastMaxResults = -1;
 let lastThreshold = -1.0;
 
@@ -67,12 +66,12 @@ async function setupApp() {
         // 2. Function to create/re-create the detector
         async function createOrUpdateDetector(isInitialLoad = false) {
             // Get current values from ALL controls
-            const modelPath = modelSelect.value; // --- NEW ---
+            const modelPath = modelSelect.value;
             const maxResults = parseInt(maxResultsSlider.value, 10);
             const scoreThreshold = parseFloat(thresholdSlider.value);
             
             // Store these values as the "last applied" settings
-            lastModel = modelPath; // --- NEW ---
+            lastModel = modelPath;
             lastMaxResults = maxResults;
             lastThreshold = scoreThreshold;
             
@@ -92,7 +91,7 @@ async function setupApp() {
             // Create the ObjectDetector with the new settings
             objectDetector = await ObjectDetector.createFromOptions(vision, {
                 baseOptions: {
-                    modelAssetPath: modelPath, // --- MODIFIED --- Load selected model
+                    modelAssetPath: modelPath,
                     delegate: "GPU"
                 },
                 runningMode: "VIDEO",
@@ -102,8 +101,7 @@ async function setupApp() {
             
             // Hide the correct loading message
             if (isInitialLoad) {
-                loadingContainer.classList.add("hidden");
-                liveView.classList.remove("hidden"); // Show video for the first time
+                // Don't hide loading container yet, enableWebcam will
             } else {
                 videoOverlay.classList.add("hidden");
             }
@@ -126,7 +124,6 @@ async function setupApp() {
             const newMaxResults = parseInt(maxResultsSlider.value, 10);
             const newThreshold = parseFloat(thresholdSlider.value);
             
-            // Only update if the values are different from the last *applied* settings
             if (newMaxResults !== lastMaxResults || newThreshold !== lastThreshold) {
                 await createOrUpdateDetector(false);
             }
@@ -135,22 +132,29 @@ async function setupApp() {
         maxResultsSlider.addEventListener("change", handleSliderChange);
         thresholdSlider.addEventListener("change", handleSliderChange);
 
-        // --- NEW --- Add event listener for model selector
         const handleModelChange = async () => {
             if (modelSelect.value !== lastModel) {
                 await createOrUpdateDetector(false);
             }
         };
         modelSelect.addEventListener("change", handleModelChange);
-        // --- End New ---
 
-        // Add event listener for camera selector
         cameraSelect.addEventListener('change', switchCamera);
         
-        // Add event listener for flip button
         flipButton.addEventListener("click", () => {
             isVideoFlipped = !isVideoFlipped; // Toggle the state
             video.classList.toggle("flipped", isVideoFlipped); // Toggle the CSS class
+        });
+        
+        // --- NEW --- Add event listener for permission button
+        permissionButton.addEventListener("click", async () => {
+            // Hide the permission overlay and try enabling the webcam again
+            permissionOverlay.classList.add("hidden");
+            // Show a temporary loading message in the main loader
+            loadingMessage.textContent = "Requesting camera permission...";
+            loadingContainer.classList.remove("hidden");
+            await enableWebcam();
+            // The loading container will be hidden by enableWebcam if successful
         });
         
         // 4. Create the detector for the first time
@@ -190,13 +194,9 @@ async function setupApp() {
         loadingMessage.style.borderRadius = "8px";
         loadingMessage.style.backgroundColor = "rgba(255, 82, 82, 0.1)";
         
-        // Ensure the loading container is visible to show the error
         loadingContainer.classList.remove("hidden");
     }
 }
-
-// Start the whole process
-setupApp();
 
 // --- Function to handle camera switching ---
 async function switchCamera() {
@@ -217,7 +217,6 @@ async function switchCamera() {
         video.classList.toggle("flipped", isVideoFlipped); // Apply CSS class
     } catch (e) {
         console.error("Could not enumerate devices to set flip state:", e);
-        // Default to not flipped if detection fails
         isVideoFlipped = false;
         video.classList.toggle("flipped", isVideoFlipped);
     }
@@ -256,26 +255,42 @@ async function enableWebcam() {
         
         // 5. Populate camera list and set initial flip state *only if it's the first time*
         if (cameraSelect.options.length === 0) {
-            await populateCameraList(); // This populates list AND sets currentDeviceId
+            await populateCameraList();
             
-            // Now that currentDeviceId is set, find the active device
             const devices = await navigator.mediaDevices.enumerateDevices();
             const activeDevice = devices.find(d => d.deviceId === currentDeviceId && d.kind === 'videoinput');
 
-            // Set default flip state
             if (activeDevice && activeDevice.facingMode === 'user') {
                 isVideoFlipped = true;
             } else {
-                isVideoFlipped = false; // Default for 'environment' (back) or unknown
+                isVideoFlipped = false;
             }
             video.classList.toggle("flipped", isVideoFlipped);
         }
 
+        // --- SUCCESS! ---
+        // Hide any overlays that might be visible
+        loadingContainer.classList.add("hidden"); // Hide main loader
+        permissionOverlay.classList.add("hidden"); // Hide permission overlay
+        liveView.classList.remove("hidden"); // Ensure live view is visible
+
     } catch (error) {
         console.error("Error accessing webcam:", error);
-        loadingMessage.textContent = "Could not access webcam. Please grant permission and refresh.";
-        loadingMessage.style.color = "#FF5252";
-        loadingContainer.classList.remove("hidden"); // Make sure error is visible
+
+        // --- NEW PERMISSION HANDLING ---
+        if (error.name === "NotAllowedError" || error.name === "PermissionDeniedError") {
+            // User denied permission
+            loadingContainer.classList.add("hidden"); // Hide the main loader
+            liveView.classList.remove("hidden"); // Show the video container
+            permissionOverlay.classList.remove("hidden"); // Show the permission overlay
+        } else {
+            // Other errors (e.g., camera not found, etc.)
+            loadingMessage.textContent = `Could not access webcam: ${error.message}. Please check device and permissions.`;
+            loadingMessage.style.color = "#FF5252";
+            loadingContainer.classList.remove("hidden"); // Make sure error is visible
+            liveView.classList.add("hidden"); // Hide the video view
+        }
+        // --- END NEW HANDLING ---
     }
 }
 
@@ -289,35 +304,27 @@ async function populateCameraList() {
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices.filter(device => device.kind === 'videoinput');
     
-    // Get the device ID of the stream that is *actually* active
     const activeStreamDeviceId = currentStream.getVideoTracks()[0].getSettings().deviceId;
 
-    // Clear any existing options
     cameraSelect.innerHTML = ''; 
     
-    // Add an option for each camera
     videoDevices.forEach(device => {
         const option = document.createElement('option');
         option.value = device.deviceId;
         
-        // --- MODIFIED --- Clean up camera labels
         let label = device.label || `Camera ${cameraSelect.options.length + 1}`;
-        // Try to be smarter about labels
         if (device.facingMode) {
             label = `${label.split('(')[0].trim()} (${device.facingMode})`;
         }
         option.textContent = label;
-        // --- End modification ---
         
-        // Pre-select the one that is currently active
         if (device.deviceId === activeStreamDeviceId) {
             option.selected = true;
-            currentDeviceId = device.deviceId; // Sync the global variable
+            currentDeviceId = device.deviceId;
         }
         cameraSelect.appendChild(option);
     });
     
-    // Only show the dropdown if there's more than one camera
     if (videoDevices.length > 1) {
         cameraSelectContainer.style.display = 'flex';
     }
@@ -340,12 +347,10 @@ async function predictWebcam() {
 
             for (const detection of results.detections) {
                 
-                // --- Draw the Bounding Box --- //
                 canvasCtx.beginPath();
                 canvasCtx.strokeStyle = "#00bcd4";
                 canvasCtx.lineWidth = 2;
                 
-                // Calculate X coordinate based on whether the video is flipped
                 let true_x = detection.boundingBox.originX;
                 if (isVideoFlipped) {
                     true_x = canvas.width - detection.boundingBox.originX - detection.boundingBox.width;
@@ -359,13 +364,11 @@ async function predictWebcam() {
                 );
                 canvasCtx.stroke();
                 
-                // --- Draw the Label --- //
                 const label = `${detection.categories[0].categoryName} (${Math.round(detection.categories[0].score * 100)}%)`;
                 
                 canvasCtx.font = "16px Arial";
                 const textWidth = canvasCtx.measureText(label).width;
                 
-                // The label drawing logic is based on true_x, so it flips automatically
                 canvasCtx.fillStyle = "rgba(0, 0, 0, 0.7)";
                 canvasCtx.fillRect(true_x - 1, detection.boundingBox.originY - 20, textWidth + 10, 20);
                 
@@ -375,6 +378,5 @@ async function predictWebcam() {
         }
     }
 
-    // Always request the next frame
     window.requestAnimationFrame(predictWebcam);
 }
