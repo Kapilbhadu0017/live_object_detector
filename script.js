@@ -198,6 +198,13 @@ async function setupApp() {
     }
 }
 
+// --- MODIFIED ---
+// Wait for the DOM to be fully loaded before running setupApp()
+// This ensures all elements like #loadingMessage are available.
+document.addEventListener("DOMContentLoaded", setupApp);
+// --- End modification ---
+
+
 // --- Function to handle camera switching ---
 async function switchCamera() {
     currentDeviceId = cameraSelect.value;
