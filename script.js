@@ -25,6 +25,14 @@ const loadingContainer = document.getElementById("loadingContainer");
 const loadingMessage = document.getElementById("loadingMessage");
 const liveView = document.getElementById("liveView");
 
+// --- NEW --- Progress bar elements
+const progressContainer = document.getElementById("progressContainer");
+const progressBar = document.getElementById("progressBar");
+const progressText = document.getElementById("progressText");
+const overlayProgressContainer = document.getElementById("overlayProgressContainer");
+const overlayProgressBar = document.getElementById("overlayProgressBar");
+const overlayProgressText = document.getElementById("overlayProgressText");
+
 const modelSelect = document.getElementById("modelSelect");
 
 const maxResultsSlider = document.getElementById("maxResultsSlider");
@@ -39,8 +47,9 @@ const flipButton = document.getElementById("flipButton");
 
 const videoOverlay = document.getElementById("videoOverlay");
 const overlayMessage = document.getElementById("overlayMessage");
+const overlaySpinner = document.querySelector(".overlaySpinner"); // Get spinner
 
-// --- NEW --- Permission overlay elements
+// --- Permission overlay elements
 const permissionOverlay = document.getElementById("permissionOverlay");
 const permissionButton = document.getElementById("permissionButton");
 
@@ -54,6 +63,57 @@ let isVideoFlipped = false;
 let lastModel = "";
 let lastMaxResults = -1;
 let lastThreshold = -1.0;
+
+
+// --- NEW --- Helper function to download model with progress
+/**
+ * Downloads a model file with progress updates.
+ * @param {string} modelPath - The path to the .tflite model file.
+ * @param {Function} onProgress - Callback function for progress updates.
+ */
+async function downloadModelWithProgress(modelPath, onProgress) {
+    const response = await fetch(modelPath);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch model: ${response.statusText}`);
+    }
+
+    const contentLength = response.headers.get('Content-Length');
+    if (!contentLength) {
+        // Fallback for servers that don't send Content-Length
+        onProgress({ percentage: null, loaded: 0, total: 0 });
+        const buffer = await response.arrayBuffer();
+        return new Uint8Array(buffer);
+    }
+
+    const total = parseInt(contentLength, 10);
+    let loaded = 0;
+
+    const reader = response.body.getReader();
+    const chunks = []; // Store chunks here
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+            break;
+        }
+        chunks.push(value);
+        loaded += value.length;
+
+        const percentage = Math.round((loaded / total) * 100);
+        onProgress({ percentage, loaded, total });
+    }
+
+    // Combine chunks into a single Uint8Array
+    const modelBuffer = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+        modelBuffer.set(chunk, offset);
+        offset += chunk.length;
+    }
+
+    return modelBuffer;
+}
+// --- END NEW FUNCTION ---
 
 
 // --- Main Function --- //
@@ -79,19 +139,52 @@ async function setupApp() {
             maxResultsValue.textContent = maxResults;
             thresholdValue.textContent = `${Math.round(scoreThreshold * 100)}%`;
             
-            // Show the correct loading message
+            // --- MODIFIED --- Setup progress UI
+            let currentProgressContainer, currentProgressBar, currentProgressText;
+            
+            if (isInitialLoad) {
+                loadingMessage.textContent = "Downloading AI model...";
+                currentProgressContainer = progressContainer;
+                currentProgressBar = progressBar;
+                currentProgressText = progressText;
+            } else {
+                overlayMessage.textContent = "Downloading AI model...";
+                overlaySpinner.classList.add("hidden"); // Hide spinner
+                currentProgressContainer = overlayProgressContainer;
+                currentProgressBar = overlayProgressBar;
+                currentProgressText = overlayProgressText;
+                videoOverlay.classList.remove("hidden"); // Show overlay
+            }
+            
+            currentProgressContainer.classList.remove("hidden");
+            currentProgressBar.style.width = "0%";
+            currentProgressText.textContent = "";
+            
+            // --- MODIFIED --- Download model with progress
+            const modelBuffer = await downloadModelWithProgress(modelPath, ({ percentage, loaded, total }) => {
+                if (percentage !== null) {
+                    currentProgressBar.style.width = `${percentage}%`;
+                    const loadedMB = (loaded / 1024 / 1024).toFixed(1);
+                    const totalMB = (total / 1024 / 1024).toFixed(1);
+                    currentProgressText.textContent = `Downloading... ${loadedMB}MB / ${totalMB}MB`;
+                } else {
+                    currentProgressText.textContent = `Downloading... (size unknown)`;
+                }
+            });
+
+            // --- MODIFIED --- Update UI post-download
             if (isInitialLoad) {
                 loadingMessage.textContent = "Initializing AI model...";
-                loadingContainer.classList.remove("hidden");
+                currentProgressText.textContent = "Download complete. Initializing...";
             } else {
-                overlayMessage.textContent = "Updating AI model...";
-                videoOverlay.classList.remove("hidden");
+                overlayMessage.textContent = "Initializing AI model...";
+                currentProgressText.textContent = "Download complete. Initializing...";
             }
 
-            // Create the ObjectDetector with the new settings
+            // --- MODIFIED --- Create ObjectDetector from buffer
             objectDetector = await ObjectDetector.createFromOptions(vision, {
                 baseOptions: {
-                    modelAssetPath: modelPath,
+                    modelAssetBuffer: modelBuffer, // Pass the downloaded buffer
                     delegate: "GPU"
                 },
                 runningMode: "VIDEO",
@@ -103,7 +196,11 @@ async function setupApp() {
             if (isInitialLoad) {
                 // Don't hide loading container yet, enableWebcam will
             } else {
-                videoOverlay.classList.add("hidden");
+                videoOverlay.classList.add("hidden"); // Hide overlay
+                // Reset overlay for next time
+                overlaySpinner.classList.remove("hidden");
+                currentProgressContainer.classList.add("hidden");
+                currentProgressText.textContent = "";
             }
         }
         
@@ -146,12 +243,14 @@ async function setupApp() {
             video.classList.toggle("flipped", isVideoFlipped); // Toggle the CSS class
         });
         
-        // --- NEW --- Add event listener for permission button
+        // --- Add event listener for permission button
         permissionButton.addEventListener("click", async () => {
             // Hide the permission overlay and try enabling the webcam again
             permissionOverlay.classList.add("hidden");
             // Show a temporary loading message in the main loader
             loadingMessage.textContent = "Requesting camera permission...";
+            progressContainer.classList.add("hidden"); // Hide progress bar
+            progressText.textContent = "";
             loadingContainer.classList.remove("hidden");
             await enableWebcam();
             // The loading container will be hidden by enableWebcam if successful
@@ -194,22 +293,22 @@ async function setupApp() {
         loadingMessage.style.borderRadius = "8px";
         loadingMessage.style.backgroundColor = "rgba(255, 82, 82, 0.1)";
         
+        // Hide progress bar on error
+        progressContainer.classList.add("hidden");
+        progressText.textContent = "";
+        
         loadingContainer.classList.remove("hidden");
     }
 }
-
-// --- MODIFIED ---
-// Wait for the DOM to be fully loaded before running setupApp()
-// This ensures all elements like #loadingMessage are available.
-document.addEventListener("DOMContentLoaded", setupApp);
-// --- End modification ---
-
 
 // --- Function to handle camera switching ---
 async function switchCamera() {
     currentDeviceId = cameraSelect.value;
     overlayMessage.textContent = "Switching camera...";
-    videoOverlay.classList.remove("hidden");
+    overlaySpinner.classList.remove("hidden"); // Show spinner
+    overlayProgressContainer.classList.add("hidden"); // Hide progress
+    overlayProgressText.textContent = "";
+    videoOverlay.classList.remove("hidden"); // Show overlay
     
     // Auto-set flip state based on the selected camera
     try {
@@ -284,7 +383,7 @@ async function enableWebcam() {
     } catch (error) {
         console.error("Error accessing webcam:", error);
 
-        // --- NEW PERMISSION HANDLING ---
+        // --- PERMISSION HANDLING ---
         if (error.name === "NotAllowedError" || error.name === "PermissionDeniedError") {
             // User denied permission
             loadingContainer.classList.add("hidden"); // Hide the main loader
@@ -294,10 +393,12 @@ async function enableWebcam() {
             // Other errors (e.g., camera not found, etc.)
             loadingMessage.textContent = `Could not access webcam: ${error.message}. Please check device and permissions.`;
             loadingMessage.style.color = "#FF5252";
+            progressContainer.classList.add("hidden"); // Hide progress bar
+            progressText.textContent = "";
             loadingContainer.classList.remove("hidden"); // Make sure error is visible
             liveView.classList.add("hidden"); // Hide the video view
         }
-        // --- END NEW HANDLING ---
+        // --- END HANDLING ---
     }
 }
 
@@ -341,8 +442,13 @@ async function populateCameraList() {
  * The main detection loop: grabs a frame, detects, draws, and repeats.
  */
 async function predictWebcam() {
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Set canvas size on every frame
+    if (canvas.width !== video.videoWidth) {
+        canvas.width = video.videoWidth;
+    }
+    if (canvas.height !== video.videoHeight) {
+        canvas.height = video.videoHeight;
+    }
 
     if (video.currentTime !== lastVideoTime) {
         lastVideoTime = video.currentTime;
@@ -359,6 +465,7 @@ async function predictWebcam() {
                 canvasCtx.lineWidth = 2;
                 
                 let true_x = detection.boundingBox.originX;
+                // Flip the x-coordinate if the video is flipped
                 if (isVideoFlipped) {
                     true_x = canvas.width - detection.boundingBox.originX - detection.boundingBox.width;
                 }
@@ -377,9 +484,11 @@ async function predictWebcam() {
                 const textWidth = canvasCtx.measureText(label).width;
                 
                 canvasCtx.fillStyle = "rgba(0, 0, 0, 0.7)";
+                // Draw the label background, adjusting for flipped video
                 canvasCtx.fillRect(true_x - 1, detection.boundingBox.originY - 20, textWidth + 10, 20);
                 
                 canvasCtx.fillStyle = "#00bcd4";
+                // Draw the label text, adjusting for flipped video
                 canvasCtx.fillText(label, true_x + 4, detection.boundingBox.originY - 5);
             }
         }
@@ -387,3 +496,6 @@ async function predictWebcam() {
 
     window.requestAnimationFrame(predictWebcam);
 }
+
+// Wait for the DOM to be fully loaded before running setupApp()
+document.addEventListener("DOMContentLoaded", setupApp);

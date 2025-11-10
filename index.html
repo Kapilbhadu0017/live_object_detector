@@ -16,6 +16,11 @@
         <!-- This is for the *initial* page load and error messages -->
         <div id="loadingContainer" class="card">
             <div id="loadingMessage">Initializing...</div>
+            <!-- --- NEW --- Progress bar for initial load -->
+            <div id="progressContainer" class="progressContainer hidden">
+                <div id="progressBar"></div>
+            </div>
+            <div id="progressText" class="progressText"></div>
         </div>
 
         <div id="liveView" class="videoContainer hidden">
@@ -24,11 +29,16 @@
             
             <!-- This is the overlay for re-loading the model -->
             <div id="videoOverlay" class="videoOverlay hidden">
-                <div class="overlaySpinner"></div>
+                <div class="overlaySpinner hidden"></div>
                 <div id="overlayMessage">Updating AI model...</div>
+                <!-- --- NEW --- Progress bar for model switching -->
+                <div id="overlayProgressContainer" class="progressContainer hidden">
+                    <div id="overlayProgressBar"></div>
+                </div>
+                <div id="overlayProgressText" class="progressText"></div>
             </div>
             
-            <!-- --- NEW --- Overlay for permission denied -->
+            <!-- Overlay for permission denied -->
             <div id="permissionOverlay" class="videoOverlay hidden">
                 <div class="permissionContent">
                     <h3>Camera Permission Denied</h3>
