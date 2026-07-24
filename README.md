@@ -2,7 +2,6 @@
 
 A high-performance, real-time object detection web application built with **MediaPipe Tasks Vision**, **TensorFlow Lite (TFLite)**, and vanilla JavaScript. The application runs entirely client-side in the browser using WebAssembly (WASM) and hardware-accelerated GPU delegates, eliminating the need for server-side processing or external API calls.
 
-[![Live Demo](https://img.shields.io/badge/Live_Demo-Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://live-object-detector-five.vercel.app/)
 ![License](https://img.shields.io/badge/License-MIT-blue.svg)
 ![WebAssembly](https://img.shields.io/badge/WebAssembly-Enabled-purple.svg)
 ![MediaPipe](https://img.shields.io/badge/MediaPipe-Vision-0097a7.svg)
@@ -10,7 +9,7 @@ A high-performance, real-time object detection web application built with **Medi
 
 ---
 
-## 🌐 Live Working Application
+## 🌐 Live Demo
 
 Try the application live directly in your web browser:  
 👉 **[https://live-object-detector-five.vercel.app/](https://live-object-detector-five.vercel.app/)**
