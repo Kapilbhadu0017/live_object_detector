@@ -22,7 +22,15 @@
                 <span class="pulse-icon"></span>
                 <h1>Live Object Detector</h1>
             </div>
-            <span class="badge" id="statusBadge">Initializing</span>
+            <div class="header-right">
+                <!-- Stats HUD Bar -->
+                <div class="stats-hud" id="statsHud">
+                    <div class="hud-item"><span class="hud-label">FPS:</span> <span id="fpsValue">0</span></div>
+                    <div class="hud-item"><span class="hud-label">Latency:</span> <span id="latencyValue">0 ms</span></div>
+                    <div class="hud-item"><span class="hud-label">Objects:</span> <span id="objectCount">0</span></div>
+                </div>
+                <span class="badge" id="statusBadge">Initializing</span>
+            </div>
         </header>
 
         <!-- Initial Page Loader and Error Messages -->
@@ -37,13 +45,6 @@
 
         <!-- Video & Detection Overlay View -->
         <div id="liveView" class="videoContainer hidden">
-            <!-- Stats HUD Bar -->
-            <div class="stats-hud" id="statsHud">
-                <div class="hud-item"><span class="hud-label">FPS:</span> <span id="fpsValue">0</span></div>
-                <div class="hud-item"><span class="hud-label">Latency:</span> <span id="latencyValue">0 ms</span></div>
-                <div class="hud-item"><span class="hud-label">Objects:</span> <span id="objectCount">0</span></div>
-            </div>
-
             <video id="webcam" autoplay playsinline></video>
             <canvas id="outputCanvas"></canvas>
             

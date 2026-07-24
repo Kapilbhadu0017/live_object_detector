@@ -55,12 +55,21 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: var(--spacing-sm) 0;
+    flex-wrap: wrap;
+    gap: 12px;
 }
 
 .logo-title {
     display: flex;
     align-items: center;
     gap: 12px;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
 }
 
 .pulse-icon {
@@ -204,21 +213,18 @@ canvas {
 
 /* --- Stats HUD --- */
 .stats-hud {
-    position: absolute;
-    top: 12px;
-    left: 12px;
-    z-index: 12;
     display: flex;
-    gap: 14px;
-    background: rgba(11, 15, 25, 0.8);
+    align-items: center;
+    gap: 12px;
+    background: rgba(23, 32, 54, 0.75);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    padding: 6px 14px;
+    padding: 5px 12px;
     border-radius: 30px;
     border: 1px solid rgba(255, 255, 255, 0.12);
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     font-weight: 500;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .hud-item {
