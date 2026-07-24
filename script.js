@@ -62,6 +62,7 @@ let isFlipped = false;
 let videoDevices = [];
 let isPredicting = false;
 let listenersAdded = false;
+let forceCpuDelegate = false;
 
 // Performance metrics
 let frameCount = 0;
@@ -69,8 +70,21 @@ let lastFpsUpdate = performance.now();
 let currentFps = 0;
 let lastInferenceTime = 0;
 
-// Model caching
+// Known model file sizes (in bytes) to calculate fallback download progress
+const KNOWN_MODEL_SIZES = {
+    "efficientdet_lite2.tflite": 12138859,
+    "efficientdet_lite0.tflite": 7254339
+};
+
+// Model memory cache (Stores cloned Uint8Array buffers)
 const modelCache = new Map();
+
+function cloneBuffer(uint8Array) {
+    if (!uint8Array || !uint8Array.byteLength) return null;
+    const dst = new Uint8Array(uint8Array.byteLength);
+    dst.set(uint8Array);
+    return dst;
+}
 
 // Color palette generator for categories
 const categoryColorMap = new Map();
@@ -100,9 +114,9 @@ document.addEventListener("DOMContentLoaded", setupApp);
 
 async function setupApp() {
     try {
-        await checkCameraPermissions();
-        await createOrUpdateDetector();
         await startWebcam();
+        await populateCameraList();
+        await createOrUpdateDetector();
         
         if (!listenersAdded) {
             addControlListeners();
@@ -122,21 +136,12 @@ async function setupApp() {
     }
 }
 
-async function checkCameraPermissions() {
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        await populateCameraList();
-        stream.getTracks().forEach(track => track.stop());
-        permissionOverlay.classList.add("hidden");
-    } catch (error) {
-        console.error("Camera permission error:", error);
-        loadingContainer.classList.add("hidden");
-        liveView.classList.remove("hidden");
-        permissionOverlay.classList.remove("hidden");
-        statusBadge.textContent = "Error";
-        statusBadge.className = "badge";
-        throw error;
-    }
+function showPermissionError() {
+    loadingContainer.classList.add("hidden");
+    liveView.classList.remove("hidden");
+    permissionOverlay.classList.remove("hidden");
+    statusBadge.textContent = "Error";
+    statusBadge.className = "badge";
 }
 
 permissionButton.addEventListener("click", async () => {
@@ -182,8 +187,13 @@ async function downloadModelWithProgress(modelPath, progressCallback) {
     }
 
     const reader = response.body.getReader();
-    const totalSizeHeader = response.headers.get('Content-Length');
-    const totalSize = totalSizeHeader ? parseInt(totalSizeHeader, 10) : 0;
+    const totalSizeHeader = response.headers.get('Content-Length') || response.headers.get('content-length');
+    let totalSize = totalSizeHeader ? parseInt(totalSizeHeader, 10) : 0;
+
+    const filename = modelPath.split('/').pop();
+    if ((!totalSize || isNaN(totalSize) || totalSize <= 0) && KNOWN_MODEL_SIZES[filename]) {
+        totalSize = KNOWN_MODEL_SIZES[filename];
+    }
 
     let downloadedSize = 0;
     let chunks = [];
@@ -195,14 +205,14 @@ async function downloadModelWithProgress(modelPath, progressCallback) {
         chunks.push(value);
         downloadedSize += value.length;
 
+        const downloadedMB = (downloadedSize / 1024 / 1024).toFixed(1);
+
         if (totalSize > 0) {
-            const percentage = Math.round((downloadedSize / totalSize) * 100);
-            const downloadedMB = (downloadedSize / 1024 / 1024).toFixed(1);
+            const percentage = Math.min(100, Math.round((downloadedSize / totalSize) * 100));
             const totalMB = (totalSize / 1024 / 1024).toFixed(1);
             progressCallback(percentage, downloadedMB, totalMB);
         } else {
-            const downloadedMB = (downloadedSize / 1024 / 1024).toFixed(1);
-            progressCallback(0, downloadedMB, "??");
+            progressCallback(0, downloadedMB, null);
         }
     }
 
@@ -227,8 +237,17 @@ function createProgressCallback(isInitialLoad) {
     pContainer.classList.remove('hidden');
 
     return (percentage, downloadedMB, totalMB) => {
-        pBar.style.width = `${percentage}%`;
-        pText.textContent = `Downloading AI Model... ${downloadedMB} MB / ${totalMB} MB`;
+        if (percentage > 0) {
+            pBar.style.width = `${percentage}%`;
+        } else {
+            pBar.style.width = '30%';
+        }
+
+        if (totalMB) {
+            pText.textContent = `Downloading AI Model... ${downloadedMB} MB / ${totalMB} MB`;
+        } else {
+            pText.textContent = `Downloading AI Model... ${downloadedMB} MB`;
+        }
     };
 }
 
@@ -257,27 +276,37 @@ async function createOrUpdateDetector() {
         let modelBuffer;
         if (modelCache.has(modelPath)) {
             const cached = modelCache.get(modelPath);
-            modelBuffer = new Uint8Array(cached); // Copy to prevent detachment
-            const msgElement = isInitialLoad ? loadingMessage : overlayMessage;
-            msgElement.textContent = "Loading model from memory cache...";
-        } else {
+            const cloned = cloneBuffer(cached);
+            if (cloned) {
+                modelBuffer = cloned;
+                const msgElement = isInitialLoad ? loadingMessage : overlayMessage;
+                msgElement.textContent = "Loading model from memory cache...";
+            } else {
+                modelCache.delete(modelPath);
+            }
+        }
+
+        if (!modelBuffer) {
             const progressCallback = createProgressCallback(isInitialLoad);
-            modelBuffer = await downloadModelWithProgress(modelPath, progressCallback);
-            modelCache.set(modelPath, new Uint8Array(modelBuffer));
+            const downloaded = await downloadModelWithProgress(modelPath, progressCallback);
+            modelBuffer = downloaded;
+            modelCache.set(modelPath, cloneBuffer(downloaded));
         }
 
         const loadingMsgElement = isInitialLoad ? loadingMessage : overlayMessage;
         loadingMsgElement.textContent = "Initializing AI detector...";
 
         if (objectDetector) {
-            try { objectDetector.close(); } catch (e) {}
-            objectDetector = null;
+            const oldDetector = objectDetector;
+            objectDetector = null; // Prevent predict loop from referencing closed object
+            try { oldDetector.close(); } catch (e) {}
         }
 
+        let preferredDelegate = forceCpuDelegate ? "CPU" : "GPU";
         let detectorOptions = {
             baseOptions: {
                 modelAssetBuffer: modelBuffer,
-                delegate: "GPU"
+                delegate: preferredDelegate
             },
             runningMode: "VIDEO",
             maxResults: maxResults,
@@ -287,7 +316,8 @@ async function createOrUpdateDetector() {
         try {
             objectDetector = await ObjectDetector.createFromOptions(vision, detectorOptions);
         } catch (gpuError) {
-            console.warn("GPU Delegate creation failed, falling back to CPU:", gpuError);
+            console.warn("GPU Delegate creation failed or crashed, falling back to CPU:", gpuError);
+            forceCpuDelegate = true;
             detectorOptions.baseOptions.delegate = "CPU";
             objectDetector = await ObjectDetector.createFromOptions(vision, detectorOptions);
         }
@@ -313,26 +343,44 @@ async function createOrUpdateDetector() {
 async function startWebcam() {
     if (currentStream) {
         currentStream.getTracks().forEach(track => track.stop());
+        currentStream = null;
     }
 
     const deviceId = cameraSelect.value;
-    const constraints = {
-        video: {
-            deviceId: deviceId ? { exact: deviceId } : undefined,
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-        }
-    };
+    const isMobile = /Android|iPhone|iPad|iPod|Windows Phone/i.test(navigator.userAgent) || (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
+
+    let constraints;
+    if (deviceId) {
+        constraints = { video: { deviceId: { exact: deviceId } } };
+    } else if (isMobile) {
+        constraints = { video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } };
+    } else {
+        constraints = { video: { width: { ideal: 1280 }, height: { ideal: 720 } } };
+    }
 
     try {
         currentStream = await navigator.mediaDevices.getUserMedia(constraints);
-        video.srcObject = currentStream;
-
-        autoFlipCamera();
-    } catch (error) {
-        console.error("Error starting webcam:", error);
-        handleSetupError(error);
+    } catch (firstErr) {
+        console.warn("Primary camera constraints failed, attempting fallback:", firstErr);
+        try {
+            currentStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        } catch (fallbackErr) {
+            console.error("Camera access failed completely:", fallbackErr);
+            throw fallbackErr;
+        }
     }
+
+    video.srcObject = currentStream;
+
+    // Explicit play call required on mobile/iOS browsers
+    try {
+        await video.play();
+    } catch (playErr) {
+        console.warn("Video play warning:", playErr);
+    }
+
+    autoFlipCamera();
+    permissionOverlay.classList.add("hidden");
 }
 
 function autoFlipCamera() {
@@ -382,7 +430,7 @@ function addControlListeners() {
     let currentThreshold = thresholdSlider.value;
     thresholdSlider.addEventListener("change", () => {
         if (thresholdSlider.value !== currentThreshold) {
-            currentThreshold = thresholdSlider.value; // FIXED TYPO!
+            currentThreshold = thresholdSlider.value;
             createOrUpdateDetector();
         }
     });
@@ -444,12 +492,12 @@ function captureSnapshot() {
 }
 
 async function predictWebcam() {
-    if (isDetectionPaused) {
+    if (isDetectionPaused || isUpdatingDetector || !objectDetector) {
         window.requestAnimationFrame(predictWebcam);
         return;
     }
 
-    if (video.readyState >= 2 && objectDetector && !isUpdatingDetector) {
+    if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
         if (video.currentTime !== lastVideoTime) {
             lastVideoTime = video.currentTime;
 
