@@ -3,7 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Object Detector</title>
+    <title>Live AI Object Detector</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
     <!-- Links to the external CSS file -->
     <link rel="stylesheet" href="style.css">
@@ -11,85 +16,121 @@
 <body>
 
     <main class="container">
-        <h1>Live Object Detector</h1>
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo-title">
+                <span class="pulse-icon"></span>
+                <h1>Live Object Detector</h1>
+            </div>
+            <span class="badge" id="statusBadge">Initializing</span>
+        </header>
 
-        <!-- This is for the *initial* page load and error messages -->
-        <div id="loadingContainer" class="card">
-            <div id="loadingMessage">Initializing...</div>
-            <!-- --- NEW --- Progress bar for initial load -->
+        <!-- Initial Page Loader and Error Messages -->
+        <div id="loadingContainer" class="card loading-card">
+            <div class="spinner"></div>
+            <div id="loadingMessage">Initializing AI libraries...</div>
             <div id="progressContainer" class="progressContainer hidden">
                 <div id="progressBar"></div>
             </div>
             <div id="progressText" class="progressText"></div>
         </div>
 
+        <!-- Video & Detection Overlay View -->
         <div id="liveView" class="videoContainer hidden">
+            <!-- Stats HUD Bar -->
+            <div class="stats-hud" id="statsHud">
+                <div class="hud-item"><span class="hud-label">FPS:</span> <span id="fpsValue">0</span></div>
+                <div class="hud-item"><span class="hud-label">Latency:</span> <span id="latencyValue">0 ms</span></div>
+                <div class="hud-item"><span class="hud-label">Objects:</span> <span id="objectCount">0</span></div>
+            </div>
+
             <video id="webcam" autoplay playsinline></video>
             <canvas id="outputCanvas"></canvas>
             
-            <!-- This is the overlay for re-loading the model -->
+            <!-- Overlay for Model Switching -->
             <div id="videoOverlay" class="videoOverlay hidden">
-                <div class="overlaySpinner hidden"></div>
+                <div class="overlaySpinner"></div>
                 <div id="overlayMessage">Updating AI model...</div>
-                <!-- --- NEW --- Progress bar for model switching -->
                 <div id="overlayProgressContainer" class="progressContainer hidden">
                     <div id="overlayProgressBar"></div>
                 </div>
                 <div id="overlayProgressText" class="progressText"></div>
             </div>
             
-            <!-- Overlay for permission denied -->
+            <!-- Overlay for Permission Denied -->
             <div id="permissionOverlay" class="videoOverlay hidden">
                 <div class="permissionContent">
+                    <div class="camera-icon">📷</div>
                     <h3>Camera Permission Denied</h3>
-                    <p>This app needs access to your camera to work.</p>
-                    <button id="permissionButton" class="button">Grant Permission</button>
+                    <p>This application requires access to your camera to detect objects in real time.</p>
+                    <button id="permissionButton" class="button primary-btn">Grant Permission</button>
                 </div>
             </div>
         </div>
 
-        
-        <!-- --- Controls for the detector --- -->
+        <!-- Action Controls Bar -->
+        <div class="action-bar card hidden" id="actionBar">
+            <button id="pauseButton" class="button action-btn">
+                <span class="icon">⏸</span> <span id="pauseBtnText">Pause</span>
+            </button>
+            <button id="snapshotButton" class="button action-btn">
+                <span class="icon">📷</span> Snapshot
+            </button>
+            <button id="toggleBoxesButton" class="button action-btn active">
+                <span class="icon">👁</span> Boxes: On
+            </button>
+            <button id="flipButton" class="button action-btn">
+                <span class="icon">🔄</span> Flip Video
+            </button>
+        </div>
+
+        <!-- Detected Objects Summary Card -->
+        <div class="card detections-card hidden" id="detectionsCard">
+            <div class="card-header">
+                <span class="card-title">Detected Objects</span>
+            </div>
+            <div class="tags-container" id="detectedTags">
+                <span class="no-objects">Scanning video feed...</span>
+            </div>
+        </div>
+
+        <!-- Detector Controls Panel -->
         <div class="controlsContainer card">
+            <div class="card-header">
+                <span class="card-title">Detector Configuration</span>
+            </div>
             
             <!-- Model Quality Selector -->
             <div class="controlGroup">
                 <label for="modelSelect">Model Quality:</label>
                 <select id="modelSelect">
-                    <option value="efficientdet_lite2.tflite" selected>High Quality (Slow)</option>
-                    <option value="efficientdet_lite0.tflite">Low Quality (Fast)</option>
+                    <option value="efficientdet_lite2.tflite" selected>High Quality (EfficientDet-Lite2)</option>
+                    <option value="efficientdet_lite0.tflite">Low Quality (EfficientDet-Lite0)</option>
                 </select>
             </div>
             
             <!-- Camera Selector -->
             <div class="controlGroup" id="cameraSelectContainer">
-                <label for="cameraSelect">Camera:</label>
+                <label for="cameraSelect">Camera Source:</label>
                 <select id="cameraSelect"></select>
             </div>
 
             <!-- Max Results Slider -->
             <div class="controlGroup">
-                <label for="maxResultsSlider">Max Results:</label>
-                <input type="range" id="maxResultsSlider" min="1" max="10" value="5" step="1">
+                <label for="maxResultsSlider">Max Objects:</label>
+                <input type="range" id="maxResultsSlider" min="1" max="20" value="5" step="1">
                 <span id="maxResultsValue">5</span>
             </div>
             
             <!-- Confidence Threshold Slider -->
             <div class="controlGroup">
                 <label for="thresholdSlider">Confidence Threshold:</label>
-                <input type="range" id="thresholdSlider" min="0.0" max="1.0" value="0.5" step="0.01">
+                <input type="range" id="thresholdSlider" min="0.10" max="0.95" value="0.50" step="0.01">
                 <span id="thresholdValue">50%</span>
-            </div>
-            
-            <!-- Flip Video Button -->
-            <div class="controlGroup">
-                <label for="flipButton">Video Feed:</label>
-                <button id="flipButton" class="button">Flip Video</button>
             </div>
         </div>
     </main>
 
-    
     <!-- Links to the external JavaScript file -->
     <script type="module" src="script.js"></script>
 

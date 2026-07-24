@@ -27,6 +27,15 @@ const overlayProgressText = document.getElementById("overlayProgressText");
 const permissionOverlay = document.getElementById("permissionOverlay");
 const permissionButton = document.getElementById("permissionButton");
 
+// Stats & Header
+const statusBadge = document.getElementById("statusBadge");
+const fpsValue = document.getElementById("fpsValue");
+const latencyValue = document.getElementById("latencyValue");
+const objectCount = document.getElementById("objectCount");
+const detectedTags = document.getElementById("detectedTags");
+const detectionsCard = document.getElementById("detectionsCard");
+const actionBar = document.getElementById("actionBar");
+
 // Controls
 const modelSelect = document.getElementById("modelSelect");
 const cameraSelect = document.getElementById("cameraSelect");
@@ -36,37 +45,75 @@ const maxResultsValue = document.getElementById("maxResultsValue");
 const thresholdSlider = document.getElementById("thresholdSlider");
 const thresholdValue = document.getElementById("thresholdValue");
 const flipButton = document.getElementById("flipButton");
+const pauseButton = document.getElementById("pauseButton");
+const pauseBtnText = document.getElementById("pauseBtnText");
+const snapshotButton = document.getElementById("snapshotButton");
+const toggleBoxesButton = document.getElementById("toggleBoxesButton");
 
 // --- Global State ---
-let objectDetector;
+let objectDetector = null;
+let isUpdatingDetector = false;
+let isDetectionPaused = false;
+let showBoundingBoxes = true;
 let lastVideoTime = -1;
-let currentStream;
+let lastTimestamp = 0;
+let currentStream = null;
 let isFlipped = false;
 let videoDevices = [];
+let isPredicting = false;
+let listenersAdded = false;
 
-// --- Model Caching ---
-// Cache downloaded models in memory
+// Performance metrics
+let frameCount = 0;
+let lastFpsUpdate = performance.now();
+let currentFps = 0;
+let lastInferenceTime = 0;
+
+// Model caching
 const modelCache = new Map();
 
-/**
- * Main setup function. Waits for the DOM to be ready.
- */
+// Color palette generator for categories
+const categoryColorMap = new Map();
+const PRESET_COLORS = [
+    "#38bdf8", // cyan
+    "#34d399", // emerald
+    "#a855f7", // purple
+    "#fb923c", // orange
+    "#f43f5e", // rose
+    "#f59e0b", // amber
+    "#818cf8", // indigo
+    "#ec4899", // pink
+    "#10b981", // green
+    "#06b6d4"  // teal
+];
+
+function getCategoryColor(categoryName) {
+    if (!categoryColorMap.has(categoryName)) {
+        const colorIndex = categoryColorMap.size % PRESET_COLORS.length;
+        categoryColorMap.set(categoryName, PRESET_COLORS[colorIndex]);
+    }
+    return categoryColorMap.get(categoryName);
+}
+
+// Start app when DOM is ready
 document.addEventListener("DOMContentLoaded", setupApp);
 
 async function setupApp() {
     try {
-        // First, check for camera permissions
         await checkCameraPermissions();
-        
-        // Load the initial model and start the webcam
         await createOrUpdateDetector();
         await startWebcam();
         
-        // Add event listeners for controls
-        addControlListeners();
+        if (!listenersAdded) {
+            addControlListeners();
+            listenersAdded = true;
+        }
 
+        if (!isPredicting) {
+            isPredicting = true;
+            window.requestAnimationFrame(predictWebcam);
+        }
     } catch (error) {
-        // This catches critical errors during *initial* setup
         if (error.name === "NotAllowedError" || error.name === "PermissionDeniedError") {
             showPermissionError();
         } else {
@@ -75,86 +122,59 @@ async function setupApp() {
     }
 }
 
-/**
- * Checks for camera permissions.
- * If permission is not granted, it will show the permission overlay.
- * If permission is already granted, it populates the camera list.
- */
 async function checkCameraPermissions() {
     try {
-        // Try to get a stream to check permissions without showing the overlay
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        
-        // Success! Populate cameras and stop the dummy stream
         await populateCameraList();
         stream.getTracks().forEach(track => track.stop());
-        
-        // Hide permission overlay if it was somehow visible
         permissionOverlay.classList.add("hidden");
-        
     } catch (error) {
-        // Permission was denied or not yet granted
         console.error("Camera permission error:", error);
         loadingContainer.classList.add("hidden");
         liveView.classList.remove("hidden");
         permissionOverlay.classList.remove("hidden");
-        // Re-throw the error to stop the setupApp process
+        statusBadge.textContent = "Error";
+        statusBadge.className = "badge";
         throw error;
     }
 }
 
-/**
- * Handles the "Grant Permission" button click.
- */
 permissionButton.addEventListener("click", async () => {
-    // Hide the permission overlay and show the loader
     permissionOverlay.classList.add("hidden");
     loadingContainer.classList.remove("hidden");
-    loadingMessage.textContent = "Waiting for permission...";
-    
-    // Re-run the setup process
-    // This will re-trigger the getUserMedia prompt
+    loadingMessage.textContent = "Waiting for camera permission...";
     await setupApp(); 
 });
 
-/**
- * Populates the camera dropdown list.
- */
 async function populateCameraList() {
     try {
         const devices = await navigator.mediaDevices.enumerateDevices();
         videoDevices = devices.filter(device => device.kind === 'videoinput');
         
-        if (videoDevices.length > 1) {
-            cameraSelectContainer.style.display = 'flex';
-            cameraSelect.innerHTML = ''; // Clear existing options
-            
-            videoDevices.forEach(device => {
+        if (videoDevices.length > 0) {
+            cameraSelect.innerHTML = '';
+            videoDevices.forEach((device, index) => {
                 const option = document.createElement('option');
                 option.value = device.deviceId;
-                // Try to create a user-friendly label
-                let label = device.label || `Camera ${cameraSelect.options.length + 1}`;
-                if (device.label.toLowerCase().includes('facing back')) {
+                let label = device.label || `Camera ${index + 1}`;
+                if (label.toLowerCase().includes('back') || label.toLowerCase().includes('rear')) {
                     label = 'Back Camera';
-                } else if (device.label.toLowerCase().includes('facing front')) {
+                } else if (label.toLowerCase().includes('front') || label.toLowerCase().includes('user')) {
                     label = 'Front Camera';
                 }
                 option.textContent = label;
                 cameraSelect.appendChild(option);
             });
+
+            if (videoDevices.length > 1) {
+                cameraSelectContainer.style.display = 'flex';
+            }
         }
     } catch (error) {
         console.error("Error enumerating devices:", error);
     }
 }
 
-/**
- * Downloads a model file, tracks progress, and returns an ArrayBuffer.
- * This function is now more robust against Content-Length discrepancies.
- * @param {string} modelPath - The path to the .tflite model file.
- * @param {(percentage: number, downloadedMB: string, totalMB: string) => void} progressCallback - Function to update UI.
- * @returns {Promise<Uint8Array>} - The model data as a Uint8Array.
- */
 async function downloadModelWithProgress(modelPath, progressCallback) {
     const response = await fetch(modelPath);
     if (!response.ok) {
@@ -162,19 +182,17 @@ async function downloadModelWithProgress(modelPath, progressCallback) {
     }
 
     const reader = response.body.getReader();
-    
-    // Get total size from header. This is *only* for the progress bar.
     const totalSizeHeader = response.headers.get('Content-Length');
     const totalSize = totalSizeHeader ? parseInt(totalSizeHeader, 10) : 0;
 
     let downloadedSize = 0;
-    let chunks = []; // Store downloaded chunks in a regular array
+    let chunks = [];
 
     while (true) {
-        const { done, value } = await reader.read(); // value is a Uint8Array
+        const { done, value } = await reader.read();
         if (done) break;
 
-        chunks.push(value); // Store the chunk
+        chunks.push(value);
         downloadedSize += value.length;
 
         if (totalSize > 0) {
@@ -183,36 +201,24 @@ async function downloadModelWithProgress(modelPath, progressCallback) {
             const totalMB = (totalSize / 1024 / 1024).toFixed(1);
             progressCallback(percentage, downloadedMB, totalMB);
         } else {
-            // Show progress in MB if total size is unknown
             const downloadedMB = (downloadedSize / 1024 / 1024).toFixed(1);
             progressCallback(0, downloadedMB, "??");
         }
     }
 
-    // --- THIS IS THE FIX ---
-    // 1. Create the final buffer with the *correct*, measured size
     const modelBuffer = new Uint8Array(downloadedSize);
-    
-    // 2. Copy all the chunks into it
     let offset = 0;
     for (const chunk of chunks) {
         modelBuffer.set(chunk, offset);
         offset += chunk.length;
     }
-    // --- END OF FIX ---
 
-    // Ensure progress bar hits 100%
     const finalMB = (downloadedSize / 1024 / 1024).toFixed(1);
     progressCallback(100, finalMB, finalMB);
     
     return modelBuffer;
 }
 
-
-/**
- * Callback function to update the correct progress bar (initial or overlay).
- * @param {boolean} isInitialLoad - True if it's the first page load.
- */
 function createProgressCallback(isInitialLoad) {
     const pBar = isInitialLoad ? progressBar : overlayProgressBar;
     const pText = isInitialLoad ? progressText : overlayProgressText;
@@ -222,55 +228,53 @@ function createProgressCallback(isInitialLoad) {
 
     return (percentage, downloadedMB, totalMB) => {
         pBar.style.width = `${percentage}%`;
-        pText.textContent = `Downloading... ${downloadedMB} MB / ${totalMB} MB`;
+        pText.textContent = `Downloading AI Model... ${downloadedMB} MB / ${totalMB} MB`;
     };
 }
 
-
-/**
- * Creates a new ObjectDetector or updates the existing one with new settings.
- */
 async function createOrUpdateDetector() {
-    const isInitialLoad = !objectDetector; // Is this the first time we're loading?
+    if (isUpdatingDetector) return;
+    isUpdatingDetector = true;
+
+    const isInitialLoad = !objectDetector;
     
-    // Show the correct loader
     if (isInitialLoad) {
         loadingContainer.classList.remove("hidden");
         loadingMessage.textContent = "Loading MediaPipe libraries...";
     } else {
         videoOverlay.classList.remove("hidden");
-        overlaySpinner.classList.add("hidden"); // Hide spinner, show progress
+        overlaySpinner.classList.remove("hidden");
         overlayMessage.textContent = "Switching AI model...";
     }
 
     try {
-        const { ObjectDetector, vision } = await loadMediaPipe();
+        const vision = await FilesetResolver.forVisionTasks('./mediapipe_wasm');
 
         const modelPath = modelSelect.value;
         const maxResults = parseInt(maxResultsSlider.value, 10);
         const scoreThreshold = parseFloat(thresholdSlider.value);
 
-        // --- Download the model (from cache or network) ---
         let modelBuffer;
         if (modelCache.has(modelPath)) {
-            modelBuffer = modelCache.get(modelPath);
-            overlayMessage.textContent = "Loading model from cache...";
+            const cached = modelCache.get(modelPath);
+            modelBuffer = new Uint8Array(cached); // Copy to prevent detachment
+            const msgElement = isInitialLoad ? loadingMessage : overlayMessage;
+            msgElement.textContent = "Loading model from memory cache...";
         } else {
             const progressCallback = createProgressCallback(isInitialLoad);
             modelBuffer = await downloadModelWithProgress(modelPath, progressCallback);
-            modelCache.set(modelPath, modelBuffer); // Cache the downloaded model
+            modelCache.set(modelPath, new Uint8Array(modelBuffer));
         }
 
-        // --- Create the detector ---
         const loadingMsgElement = isInitialLoad ? loadingMessage : overlayMessage;
-        loadingMsgElement.textContent = "Initializing AI model...";
+        loadingMsgElement.textContent = "Initializing AI detector...";
 
-        // Close old detector if it exists
         if (objectDetector) {
-            objectDetector.close();
+            try { objectDetector.close(); } catch (e) {}
+            objectDetector = null;
         }
 
-        objectDetector = await ObjectDetector.createFromOptions(vision, {
+        let detectorOptions = {
             baseOptions: {
                 modelAssetBuffer: modelBuffer,
                 delegate: "GPU"
@@ -278,46 +282,35 @@ async function createOrUpdateDetector() {
             runningMode: "VIDEO",
             maxResults: maxResults,
             scoreThreshold: scoreThreshold
-        });
+        };
 
-        // Hide loaders
+        try {
+            objectDetector = await ObjectDetector.createFromOptions(vision, detectorOptions);
+        } catch (gpuError) {
+            console.warn("GPU Delegate creation failed, falling back to CPU:", gpuError);
+            detectorOptions.baseOptions.delegate = "CPU";
+            objectDetector = await ObjectDetector.createFromOptions(vision, detectorOptions);
+        }
+
         if (isInitialLoad) {
             loadingContainer.classList.add("hidden");
             liveView.classList.remove("hidden");
+            actionBar.classList.remove("hidden");
+            detectionsCard.classList.remove("hidden");
         } else {
             videoOverlay.classList.add("hidden");
-            overlaySpinner.classList.remove("hidden"); // Reset spinner
         }
+        statusBadge.textContent = "Active";
+        statusBadge.className = "badge active";
 
     } catch (error) {
         handleSetupError(error);
+    } finally {
+        isUpdatingDetector = false;
     }
 }
 
-/**
- * Loads the MediaPipe libraries from the local folder.
- */
-async function loadMediaPipe() {
-    try {
-        const { ObjectDetector, FilesetResolver } = await import(
-            './mediapipe_wasm/vision_bundle.mjs'
-        );
-        const vision = await FilesetResolver.forVisionTasks(
-            './mediapipe_wasm'
-        );
-        return { ObjectDetector, vision };
-    } catch (error) {
-        console.error("Critical error loading MediaPipe libraries:", error);
-        error.message = "Failed to load critical AI libraries from 'mediapipe_wasm' folder.";
-        throw error;
-    }
-}
-
-/**
- * Starts or restarts the webcam stream with the selected device.
- */
 async function startWebcam() {
-    // Stop any existing stream
     if (currentStream) {
         currentStream.getTracks().forEach(track => track.stop());
     }
@@ -335,45 +328,33 @@ async function startWebcam() {
         currentStream = await navigator.mediaDevices.getUserMedia(constraints);
         video.srcObject = currentStream;
 
-        // Auto-flip based on camera facing mode
-        autoFlipCamera(deviceId);
-        
-        // Start the detection loop
-        video.addEventListener("loadeddata", predictWebcam);
-
+        autoFlipCamera();
     } catch (error) {
         console.error("Error starting webcam:", error);
         handleSetupError(error);
     }
 }
 
-/**
- * Automatically flips the video if the camera is user-facing.
- */
-function autoFlipCamera(selectedDeviceId) {
-    const selectedDevice = videoDevices.find(device => device.deviceId === selectedDeviceId);
-    
-    // Default to 'user' (front) if we can't determine
+function autoFlipCamera() {
     let facingMode = 'user'; 
-    
-    if (selectedDevice) {
-        facingMode = selectedDevice.facingMode || 'user';
-    } else if (currentStream) {
-        // Fallback: check the track's settings
-        const trackSettings = currentStream.getVideoTracks()[0].getSettings();
-        facingMode = trackSettings.facingMode || 'user';
+    if (currentStream && currentStream.getVideoTracks().length > 0) {
+        const track = currentStream.getVideoTracks()[0];
+        const settings = track.getSettings();
+        if (settings.facingMode) {
+            facingMode = settings.facingMode;
+        } else if (track.label) {
+            const label = track.label.toLowerCase();
+            if (label.includes('back') || label.includes('rear') || label.includes('environment')) {
+                facingMode = 'environment';
+            }
+        }
     }
 
-    // Flip if 'user' (front camera), don't flip if 'environment' (back camera)
     isFlipped = (facingMode === 'user');
     video.classList.toggle('flipped', isFlipped);
 }
 
-/**
- * Binds all the event listeners for the control panel.
- */
 function addControlListeners() {
-    // --- Smooth Label Updates (on 'input') ---
     maxResultsSlider.addEventListener("input", () => {
         maxResultsValue.textContent = maxResultsSlider.value;
     });
@@ -382,7 +363,6 @@ function addControlListeners() {
         thresholdValue.textContent = `${Math.round(parseFloat(thresholdSlider.value) * 100)}%`;
     });
 
-    // --- Heavy AI Updates (on 'change', when user releases) ---
     let currentModel = modelSelect.value;
     modelSelect.addEventListener("change", () => {
         if (modelSelect.value !== currentModel) {
@@ -402,66 +382,166 @@ function addControlListeners() {
     let currentThreshold = thresholdSlider.value;
     thresholdSlider.addEventListener("change", () => {
         if (thresholdSlider.value !== currentThreshold) {
-            currentThreshold = currentThreshold;
+            currentThreshold = thresholdSlider.value; // FIXED TYPO!
             createOrUpdateDetector();
         }
     });
-    
-    // --- Other Controls ---
+
     cameraSelect.addEventListener("change", startWebcam);
-    
+
     flipButton.addEventListener("click", () => {
         isFlipped = !isFlipped;
         video.classList.toggle('flipped', isFlipped);
     });
+
+    pauseButton.addEventListener("click", () => {
+        isDetectionPaused = !isDetectionPaused;
+        pauseBtnText.textContent = isDetectionPaused ? "Resume" : "Pause";
+        pauseButton.classList.toggle("active", isDetectionPaused);
+        if (!isDetectionPaused) {
+            statusBadge.textContent = "Active";
+            statusBadge.className = "badge active";
+        } else {
+            statusBadge.textContent = "Paused";
+            statusBadge.className = "badge";
+        }
+    });
+
+    toggleBoxesButton.addEventListener("click", () => {
+        showBoundingBoxes = !showBoundingBoxes;
+        toggleBoxesButton.innerHTML = `<span class="icon">👁</span> Boxes: ${showBoundingBoxes ? "On" : "Off"}`;
+        toggleBoxesButton.classList.toggle("active", showBoundingBoxes);
+        if (!showBoundingBoxes) {
+            canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+    });
+
+    snapshotButton.addEventListener("click", captureSnapshot);
 }
 
-/**
- * The main detection loop.
- */
-async function predictWebcam() {
-    if (video.readyState < 2) {
-      window.requestAnimationFrame(predictWebcam);
-      return;
+function captureSnapshot() {
+    const tempCanvas = document.createElement("canvas");
+    const w = video.videoWidth || 1280;
+    const h = video.videoHeight || 720;
+    tempCanvas.width = w;
+    tempCanvas.height = h;
+    const ctx = tempCanvas.getContext("2d");
+
+    if (isFlipped) {
+        ctx.translate(w, 0);
+        ctx.scale(-1, 1);
     }
-    
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, w, h);
+    if (isFlipped) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+    }
+    ctx.drawImage(canvas, 0, 0, w, h);
 
-    if (objectDetector && video.currentTime !== lastVideoTime) {
-        lastVideoTime = video.currentTime;
-        
-        // --- FIX ---
-        // Changed Date.Now() to Date.now() (lowercase 'n')
-        const results = objectDetector.detectForVideo(video, Date.now());
+    const link = document.createElement("a");
+    link.download = `detection-snapshot-${Date.now()}.png`;
+    link.href = tempCanvas.toDataURL("image/png");
+    link.click();
+}
 
-        canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        for (const detection of results.detections) {
-            drawDetection(detection);
+async function predictWebcam() {
+    if (isDetectionPaused) {
+        window.requestAnimationFrame(predictWebcam);
+        return;
+    }
+
+    if (video.readyState >= 2 && objectDetector && !isUpdatingDetector) {
+        if (video.currentTime !== lastVideoTime) {
+            lastVideoTime = video.currentTime;
+
+            // Dynamically update container aspect ratio to prevent stretch/crop mismatch
+            if (video.videoWidth && video.videoHeight) {
+                const aspect = video.videoWidth / video.videoHeight;
+                const currentAspectStr = liveView.style.aspectRatio;
+                let currentAspect = 0;
+                if (currentAspectStr) {
+                    const parts = currentAspectStr.split('/').map(p => parseFloat(p.trim()));
+                    if (parts.length === 2 && parts[1] !== 0) {
+                        currentAspect = parts[0] / parts[1];
+                    }
+                }
+                if (Math.abs(aspect - currentAspect) > 0.01) {
+                    liveView.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
+                }
+            }
+
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            const startTime = performance.now();
+
+            try {
+                // Strictly monotonic timestamp for MediaPipe WASM detector
+                const now = performance.now();
+                const timestamp = Math.max(now, lastTimestamp + 0.001);
+                lastTimestamp = timestamp;
+
+                const results = objectDetector.detectForVideo(video, timestamp);
+                lastInferenceTime = Math.round(performance.now() - startTime);
+
+                canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+
+                if (showBoundingBoxes && results && results.detections) {
+                    for (const detection of results.detections) {
+                        drawDetection(detection);
+                    }
+                }
+
+                updateDetectionsSummary(results ? results.detections : []);
+            } catch (err) {
+                console.warn("Detection frame error:", err);
+            }
+
+            // Update FPS & Latency metrics
+            frameCount++;
+            const nowTime = performance.now();
+            if (nowTime - lastFpsUpdate >= 1000) {
+                currentFps = Math.round((frameCount * 1000) / (nowTime - lastFpsUpdate));
+                frameCount = 0;
+                lastFpsUpdate = nowTime;
+                fpsValue.textContent = currentFps;
+                latencyValue.textContent = `${lastInferenceTime} ms`;
+            }
         }
     }
 
-    // Keep the loop going
     window.requestAnimationFrame(predictWebcam);
 }
 
-/**
- * Draws a single detection (box and label) onto the canvas.
- * This function is now "flip-aware".
- * @param {object} detection - A single detection object from MediaPipe.
- */
+function updateDetectionsSummary(detections) {
+    objectCount.textContent = detections.length;
+
+    if (!detections || detections.length === 0) {
+        detectedTags.innerHTML = '<span class="no-objects">No objects detected</span>';
+        return;
+    }
+
+    detectedTags.innerHTML = '';
+    detections.forEach(detection => {
+        const category = detection.categories[0];
+        const color = getCategoryColor(category.categoryName);
+        const tag = document.createElement("span");
+        tag.className = "object-tag";
+        tag.style.borderColor = color;
+        tag.style.boxShadow = `0 2px 8px ${color}33`;
+        tag.innerHTML = `<span style="color: ${color};">●</span> ${category.categoryName} <span class="tag-score">${Math.round(category.score * 100)}%</span>`;
+        detectedTags.appendChild(tag);
+    });
+}
+
 function drawDetection(detection) {
     const box = detection.boundingBox;
-    
-    // --- 1. Calculate Coordinates ---
-    let x, textX, textBgX;
-    
+    const category = detection.categories[0];
+    const color = getCategoryColor(category.categoryName);
+
+    let x;
     if (isFlipped) {
-        // Flipped calculation
         x = canvas.width - box.originX - box.width;
     } else {
-        // Normal calculation
         x = box.originX;
     }
 
@@ -469,77 +549,71 @@ function drawDetection(detection) {
     const w = box.width;
     const h = box.height;
 
-    // --- 2. Draw the Bounding Box ---
+    // --- 1. Draw Bounding Box with Rounded Corners ---
+    canvasCtx.save();
+    canvasCtx.strokeStyle = color;
+    canvasCtx.lineWidth = Math.max(3, canvas.width * 0.004);
+    canvasCtx.shadowColor = color;
+    canvasCtx.shadowBlur = 8;
+    
+    // Draw box
     canvasCtx.beginPath();
-    // --- FIX ---
-    // Replaced invalid CSS `var()` with a simple string
-    canvasCtx.strokeStyle = "#00bcd4"; 
-    canvasCtx.lineWidth = Math.max(2, canvas.width * 0.003); // Responsive line width
     canvasCtx.rect(x, y, w, h);
     canvasCtx.stroke();
-    
-    // --- 3. Draw the Label ---
-    const label = `${detection.categories[0].categoryName} (${Math.round(detection.categories[0].score * 100)}%)`;
-    
-    const fontSize = Math.max(16, canvas.width * 0.012);
-    canvasCtx.font = `bold ${fontSize}px Arial`;
-    const textWidth = canvasCtx.measureText(label).width;
-    const textHeight = fontSize * 1.4;
+    canvasCtx.restore();
 
-    // Set text alignment based on flip state
-    if (isFlipped) {
-        textX = x + w - textWidth - 5; // Align text to the right inside the box
-        textBgX = x + w - textWidth - 10;
-    } else {
-        textX = x + 5; // Align text to the left inside the box
-        textBgX = x;
+    // --- 2. Draw Label & Score Badge ---
+    const scoreText = `${Math.round(category.score * 100)}%`;
+    const labelText = `${category.categoryName} ${scoreText}`;
+
+    const fontSize = Math.max(14, Math.round(canvas.width * 0.015));
+    canvasCtx.font = `600 ${fontSize}px 'Inter', sans-serif`;
+    const textMetrics = canvasCtx.measureText(labelText);
+    const textWidth = textMetrics.width;
+    const textHeight = fontSize * 1.5;
+
+    const padX = 8;
+    const padY = 4;
+    const bgWidth = textWidth + (padX * 2);
+    const bgHeight = textHeight + (padY * 2);
+
+    let textBgX = x;
+    // Keep badge within canvas boundaries
+    if (textBgX + bgWidth > canvas.width) {
+        textBgX = canvas.width - bgWidth - 4;
     }
-    
-    // Handle label position (move inside if at the top edge)
-    let textY = y + textHeight * 0.8;
-    let textBgY = y;
-    
-    if (textBgY < textHeight) { // If label is near the top edge
-        textY = y + h - (textHeight * 0.2);
-        textBgY = y + h - textHeight;
+    if (textBgX < 0) {
+        textBgX = 4;
     }
 
-    // Draw the text background
-    canvasCtx.fillStyle = "rgba(0, 0, 0, 0.7)";
-    canvasCtx.fillRect(textBgX, textBgY, textWidth + 10, textHeight);
+    let textBgY = y - bgHeight - 4;
+    if (textBgY < 0) { // Near top edge, place inside box
+        textBgY = y + 4;
+    }
+
+    // Badge Background
+    canvasCtx.save();
+    canvasCtx.fillStyle = "rgba(11, 15, 25, 0.85)";
+    canvasCtx.strokeStyle = color;
+    canvasCtx.lineWidth = 1;
     
-    // Draw the text
-    // --- FIX ---
-    // Replaced invalid CSS `var()` with a simple string
-    canvasCtx.fillStyle = "#00bcd4";
-    canvasCtx.fillText(label, textX, textY);
+    canvasCtx.beginPath();
+    canvasCtx.rect(textBgX, textBgY, bgWidth, bgHeight);
+    canvasCtx.fill();
+    canvasCtx.stroke();
+
+    // Label Text
+    canvasCtx.fillStyle = color;
+    canvasCtx.fillText(labelText, textBgX + padX, textBgY + fontSize + padY - 2);
+    canvasCtx.restore();
 }
 
-/**
- * A centralized error handler for setup failures.
- * @param {Error} error - The error object.
- */
 function handleSetupError(error) {
-    console.error("Full error:", error);
+    console.error("Setup error:", error);
     const msg = error.message || "An unknown error occurred.";
-
-    if (msg.includes("Failed to load a critical file")) {
-        // This is the detailed error from our check
-        loadingMessage.innerHTML = msg; // Use innerHTML to render line breaks
-    } else {
-        loadingMessage.textContent = `Error: ${msg}. Please check the console (F12) and refresh.`;
-    }
-    
-    loadingMessage.style.color = "#FF5252"; // Red
+    loadingMessage.textContent = `Error: ${msg}. Please refresh or check camera settings.`;
+    loadingMessage.style.color = "#f43f5e";
+    statusBadge.textContent = "Error";
+    statusBadge.className = "badge";
     loadingContainer.classList.remove("hidden");
-    liveView.classList.add("hidden");
-}
-
-/**
- * Shows the specific error for "Permission Denied".
- */
-function showPermissionError() {
-    loadingContainer.classList.add("hidden");
-    liveView.classList.remove("hidden");
-    permissionOverlay.classList.remove("hidden");
 }
